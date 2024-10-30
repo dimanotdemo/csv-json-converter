@@ -80,15 +80,20 @@ export function convertToJSON(
       if (!config?.include) return;
 
       const value = cleanValue(row[index]);
+      if (!value) return;
+
+      // Use BLANK for empty header if it's not mapped
+      const effectiveHeader = header || "BLANK";
+      const mappedName = config.mappedName || effectiveHeader;
       
-      if (config.isMetafield && value) {
+      if (config.isMetafield) {
         metafields.push({
-          key: config.mappedName.toLowerCase().replace(/\s+/g, '_'),
+          key: mappedName.toLowerCase().replace(/\s+/g, '_'),
           value: value,
           type: config.metafieldType || 'string',
           namespace: config.metafieldNamespace || 'custom'
         });
-      } else if (config.isOption && value) {
+      } else if (config.isOption) {
         const values = value
           .split(config.optionSeparator || ',')
           .map(v => v.trim())
@@ -96,14 +101,15 @@ export function convertToJSON(
 
         if (values.length > 0) {
           options.push({
-            name: config.mappedName,
-            values: [...new Set(values)] // Remove duplicates
+            name: mappedName,
+            values: [...new Set(values)]
           });
         }
-      } else if (config.injectIntoVariants && value) {
-        variantFields[config.variantFieldName || config.mappedName] = value;
-      } else if (value !== null) {
-        jsonObject[config.mappedName] = convertValue(value, config.metafieldType);
+      } else if (config.injectIntoVariants) {
+        variantFields[config.variantFieldName || mappedName] = value;
+      } else {
+        // Use the mapped name for the field
+        jsonObject[mappedName] = convertValue(value, config.metafieldType);
       }
     });
 

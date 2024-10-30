@@ -44,3 +44,7 @@ export interface CartesianOptions {
 export interface VariantData {
   [key: string]: string;
 }
+
+// Add or update the type definitions
+export type CSVRow = string[];
+export type CSVData = CSVRow[];

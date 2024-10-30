@@ -175,19 +175,22 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
     setNewColumnDefault('');
   };
 
-  // Ensure unique headers by removing duplicates
+  // Ensure unique headers by removing duplicates, but preserve empty headers
   const allHeaders = Array.from(new Set([
     ...headers,
     ...Object.keys(columnConfig).filter(header => columnConfig[header].isCustom)
   ]));
 
-  // Add a check to ensure header isn't empty
-  const validHeaders = allHeaders.filter(header => header.trim() !== '');
+  // Map empty headers to BLANK but keep the original empty string as the key
+  const effectiveHeaders = allHeaders.map(header => ({
+    original: header,
+    display: header.trim() === '' ? 'BLANK' : header
+  }));
 
   // Group headers including pending changes
-  const groupedHeaders = validHeaders.reduce((acc, header) => {
-    const group = getEffectiveGroup(header, columnConfig[header]);
-    acc[group] = [...(acc[group] || []), header];
+  const groupedHeaders = effectiveHeaders.reduce((acc, { original }) => {
+    const group = getEffectiveGroup(original, columnConfig[original]);
+    acc[group] = [...(acc[group] || []), original];
     return acc;
   }, {} as Record<string, string[]>);
 
@@ -195,11 +198,6 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
     const newConfig = { ...columnConfig };
     delete newConfig[header];
     onConfigChange(newConfig);
-  };
-
-  const handleDefaultValueChange = (header: string, value: string) => {
-    handleConfigChange(header, { defaultValue: value });
-    setEditingDefault(null);
   };
 
   const renderColumnCard = (header: string, index: number): JSX.Element => {
@@ -216,7 +214,6 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
           isMoving && "border-primary/50 bg-primary/5"
         )}
         onClick={(e) => {
-          // Don't toggle if clicking on the settings button, name label, or input
           if (
             e.target instanceof HTMLElement && 
             (e.target.closest('button') || 
@@ -228,32 +225,32 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
           handleConfigChange(header, { include: !columnConfig[header]?.include });
         }}
       >
-        <CardContent className="px-4 py-2">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 flex-1">
+            <div className="flex items-center gap-2">
               <Checkbox
                 id={`include-${header}-${index}`}
                 checked={columnConfig[header]?.include ?? true}
                 onCheckedChange={(checked) => {
                   handleConfigChange(header, { include: checked as boolean });
                 }}
-                onClick={(e) => e.stopPropagation()} // Prevent card click when clicking checkbox
+                onClick={(e) => e.stopPropagation()}
               />
               {editingName === header ? (
                 <Input
                   autoFocus
-                  value={columnConfig[header]?.mappedName || header}
+                  value={columnConfig[header]?.mappedName || (header.trim() === '' ? 'BLANK' : header)}
                   onChange={(e) => handleConfigChange(header, { mappedName: e.target.value })}
                   onBlur={() => setEditingName(null)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') setEditingName(null);
                     if (e.key === 'Escape') {
-                      handleConfigChange(header, { mappedName: header });
+                      handleConfigChange(header, { mappedName: header.trim() === '' ? 'BLANK' : header });
                       setEditingName(null);
                     }
                   }}
                   className="h-8 px-2"
-                  onClick={(e) => e.stopPropagation()} // Prevent card click when clicking input
+                  onClick={(e) => e.stopPropagation()}
                 />
               ) : (
                 <Label 
@@ -261,219 +258,231 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
                   className="font-medium cursor-pointer hover:text-primary transition-colors"
                   onClick={(e) => {
                     e.preventDefault();
-                    e.stopPropagation(); // Prevent card click when clicking label
+                    e.stopPropagation();
                     setEditingName(header);
                   }}
                 >
-                  {columnConfig[header]?.mappedName || header}
+                  {columnConfig[header]?.mappedName || (header.trim() === '' ? 'BLANK' : header)}
                 </Label>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              {columnConfig[header]?.include && (
-                <div className="flex items-center gap-2">
-                  {/* Show both gear icon and more options for custom columns */}
+            {columnConfig[header]?.include && (
+              <div className="flex items-center gap-2">
+                <Popover 
+                  open={openPopovers[header]} 
+                  onOpenChange={(open) => handlePopoverOpenChange(header, open)}
+                >
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className={cn(
+                        "px-2",
+                        isMoving && "text-primary"
+                      )}
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Conversion Options</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Configure how this field should be converted
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`metafield-${header}-${index}`}
+                            checked={(pendingChanges[header]?.isMetafield ?? columnConfig[header]?.isMetafield) ?? false}
+                            onCheckedChange={(checked) => 
+                              handleConfigChange(header, { isMetafield: checked as boolean })
+                            }
+                          />
+                          <Label htmlFor={`metafield-${header}-${index}`}>Convert to Metafield</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`option-${header}-${index}`}
+                            checked={columnConfig[header]?.isOption ?? false}
+                            onCheckedChange={(checked) => 
+                              handleConfigChange(header, { isOption: checked as boolean })
+                            }
+                          />
+                          <Label htmlFor={`option-${header}-${index}`}>Convert to Option</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`variants-${header}-${index}`}
+                            checked={columnConfig[header]?.injectIntoVariants ?? false}
+                            onCheckedChange={(checked) => 
+                              handleConfigChange(header, { injectIntoVariants: checked as boolean })
+                            }
+                          />
+                          <Label htmlFor={`variants-${header}-${index}`}>Insert into Variants</Label>
+                        </div>
+                      </div>
+
+                      {/* Show additional settings based on both current and pending state */}
+                      {((pendingChanges[header]?.isMetafield ?? columnConfig[header]?.isMetafield) || 
+                        (pendingChanges[header]?.isOption ?? columnConfig[header]?.isOption) || 
+                        (pendingChanges[header]?.injectIntoVariants ?? columnConfig[header]?.injectIntoVariants)) && (
+                        <div className="grid gap-2 border-t pt-4">
+                          {(pendingChanges[header]?.injectIntoVariants ?? columnConfig[header]?.injectIntoVariants) && (
+                            <div className="grid gap-2">
+                              <Label htmlFor={`variant-field-${header}-${index}`}>Variant field name:</Label>
+                              <Input
+                                id={`variant-field-${header}-${index}`}
+                                value={pendingChanges[header]?.variantFieldName ?? columnConfig[header]?.variantFieldName ?? columnConfig[header]?.mappedName}
+                                onChange={(e) => handleConfigChange(header, { variantFieldName: e.target.value })}
+                                placeholder={columnConfig[header]?.mappedName}
+                              />
+                            </div>
+                          )}
+
+                          {(pendingChanges[header]?.isMetafield ?? columnConfig[header]?.isMetafield) && (
+                            <div className="grid gap-2">
+                              <Label htmlFor={`metafield-type-${header}-${index}`}>Type:</Label>
+                              <Select
+                                value={pendingChanges[header]?.metafieldType ?? columnConfig[header]?.metafieldType ?? 'single_line_text_field'}
+                                onValueChange={(value) => handleConfigChange(header, { metafieldType: value })}
+                              >
+                                <SelectTrigger id={`metafield-type-${header}-${index}`}>
+                                  <SelectValue placeholder="Select type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="single_line_text_field">Text</SelectItem>
+                                  <SelectItem value="number_integer">Number</SelectItem>
+                                  <SelectItem value="boolean">Boolean</SelectItem>
+                                  <SelectItem value="date">Date</SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              <Label htmlFor={`namespace-${header}-${index}`}>Namespace:</Label>
+                              <Input
+                                id={`namespace-${header}-${index}`}
+                                value={pendingChanges[header]?.metafieldNamespace ?? columnConfig[header]?.metafieldNamespace ?? 'custom'}
+                                onChange={(e) => handleConfigChange(header, { metafieldNamespace: e.target.value })}
+                              />
+                            </div>
+                          )}
+
+                          {(pendingChanges[header]?.isOption ?? columnConfig[header]?.isOption) && (
+                            <div className="grid gap-2">
+                              <Label htmlFor={`separator-${header}-${index}`}>Value separator:</Label>
+                              <Input
+                                id={`separator-${header}-${index}`}
+                                value={pendingChanges[header]?.optionSeparator ?? columnConfig[header]?.optionSeparator ?? ','}
+                                onChange={(e) => handleConfigChange(header, { optionSeparator: e.target.value })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Show more options ONLY for custom columns */}
+                {columnConfig[header]?.isCustom && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="px-2">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditingDefault(header);
+                        }}
+                        className="flex items-center gap-2"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Edit Default Value
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteColumn(header);
+                        }}
+                        className="flex items-center gap-2 text-destructive"
+                      >
+                        <Trash className="h-4 w-4" />
+                        Delete Column
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+
+                {editingDefault === header && (
                   <Popover 
-                    open={openPopovers[header]} 
-                    onOpenChange={(open) => handlePopoverOpenChange(header, open)}
+                    open={true} 
+                    onOpenChange={(open) => {
+                      if (!open) {
+                        setEditingDefault(null);
+                      }
+                    }}
+                    modal={true}
                   >
                     <PopoverTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className={cn(
-                          "px-2",
-                          isMoving && "text-primary"
-                        )}
-                      >
-                        <Settings className="h-4 w-4" />
-                      </Button>
+                      <div />
                     </PopoverTrigger>
-                    <PopoverContent className="w-80">
+                    <PopoverContent 
+                      className="w-80 z-50"
+                      align="end" 
+                      side="right"
+                      sideOffset={5}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className="grid gap-4">
                         <div className="space-y-2">
-                          <h4 className="font-medium leading-none">Conversion Options</h4>
+                          <h4 className="font-medium leading-none">Edit Default Value</h4>
                           <p className="text-sm text-muted-foreground">
-                            Configure how this field should be converted
+                            Set the default value for this custom column
                           </p>
                         </div>
                         <div className="grid gap-2">
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`metafield-${header}-${index}`}
-                              checked={(pendingChanges[header]?.isMetafield ?? columnConfig[header]?.isMetafield) ?? false}
-                              onCheckedChange={(checked) => 
-                                handleConfigChange(header, { isMetafield: checked as boolean })
+                          <Label htmlFor={`default-${header}`}>Default Value</Label>
+                          <Input
+                            id={`default-${header}`}
+                            value={columnConfig[header]?.defaultValue || ''}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const value = e.target.value;
+                              handleConfigChange(header, { defaultValue: value });
+                            }}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                setEditingDefault(null); // Close the popover
+                                // Close both the dropdown menu and its parent
+                                const dropdownMenu = document.querySelector('[data-state="open"][role="menu"]');
+                                const dropdownTrigger = document.querySelector('[data-state="open"][role="dialog"]');
+                                if (dropdownMenu) {
+                                  (dropdownMenu as HTMLElement).setAttribute('data-state', 'closed');
+                                }
+                                if (dropdownTrigger) {
+                                  (dropdownTrigger as HTMLElement).setAttribute('data-state', 'closed');
+                                }
                               }
-                            />
-                            <Label htmlFor={`metafield-${header}-${index}`}>Convert to Metafield</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`option-${header}-${index}`}
-                              checked={columnConfig[header]?.isOption ?? false}
-                              onCheckedChange={(checked) => 
-                                handleConfigChange(header, { isOption: checked as boolean })
-                              }
-                            />
-                            <Label htmlFor={`option-${header}-${index}`}>Convert to Option</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`variants-${header}-${index}`}
-                              checked={columnConfig[header]?.injectIntoVariants ?? false}
-                              onCheckedChange={(checked) => 
-                                handleConfigChange(header, { injectIntoVariants: checked as boolean })
-                              }
-                            />
-                            <Label htmlFor={`variants-${header}-${index}`}>Insert into Variants</Label>
-                          </div>
+                            }}
+                            placeholder="Enter default value"
+                            autoFocus
+                          />
                         </div>
-
-                        {/* Show additional settings based on both current and pending state */}
-                        {((pendingChanges[header]?.isMetafield ?? columnConfig[header]?.isMetafield) || 
-                          (pendingChanges[header]?.isOption ?? columnConfig[header]?.isOption) || 
-                          (pendingChanges[header]?.injectIntoVariants ?? columnConfig[header]?.injectIntoVariants)) && (
-                          <div className="grid gap-2 border-t pt-4">
-                            {(pendingChanges[header]?.injectIntoVariants ?? columnConfig[header]?.injectIntoVariants) && (
-                              <div className="grid gap-2">
-                                <Label htmlFor={`variant-field-${header}-${index}`}>Variant field name:</Label>
-                                <Input
-                                  id={`variant-field-${header}-${index}`}
-                                  value={pendingChanges[header]?.variantFieldName ?? columnConfig[header]?.variantFieldName ?? columnConfig[header]?.mappedName}
-                                  onChange={(e) => handleConfigChange(header, { variantFieldName: e.target.value })}
-                                  placeholder={columnConfig[header]?.mappedName}
-                                />
-                              </div>
-                            )}
-
-                            {(pendingChanges[header]?.isMetafield ?? columnConfig[header]?.isMetafield) && (
-                              <div className="grid gap-2">
-                                <Label htmlFor={`metafield-type-${header}-${index}`}>Type:</Label>
-                                <Select
-                                  value={pendingChanges[header]?.metafieldType ?? columnConfig[header]?.metafieldType ?? 'single_line_text_field'}
-                                  onValueChange={(value) => handleConfigChange(header, { metafieldType: value })}
-                                >
-                                  <SelectTrigger id={`metafield-type-${header}-${index}`}>
-                                    <SelectValue placeholder="Select type" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="single_line_text_field">Text</SelectItem>
-                                    <SelectItem value="number_integer">Number</SelectItem>
-                                    <SelectItem value="boolean">Boolean</SelectItem>
-                                    <SelectItem value="date">Date</SelectItem>
-                                  </SelectContent>
-                                </Select>
-
-                                <Label htmlFor={`namespace-${header}-${index}`}>Namespace:</Label>
-                                <Input
-                                  id={`namespace-${header}-${index}`}
-                                  value={pendingChanges[header]?.metafieldNamespace ?? columnConfig[header]?.metafieldNamespace ?? 'custom'}
-                                  onChange={(e) => handleConfigChange(header, { metafieldNamespace: e.target.value })}
-                                />
-                              </div>
-                            )}
-
-                            {(pendingChanges[header]?.isOption ?? columnConfig[header]?.isOption) && (
-                              <div className="grid gap-2">
-                                <Label htmlFor={`separator-${header}-${index}`}>Value separator:</Label>
-                                <Input
-                                  id={`separator-${header}-${index}`}
-                                  value={pendingChanges[header]?.optionSeparator ?? columnConfig[header]?.optionSeparator ?? ','}
-                                  onChange={(e) => handleConfigChange(header, { optionSeparator: e.target.value })}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </PopoverContent>
                   </Popover>
-
-                  {columnConfig[header]?.isCustom && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="px-2">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent card click
-                            setEditingDefault(header);
-                          }}
-                          className="flex items-center gap-2"
-                        >
-                          <Pencil className="h-4 w-4" />
-                          Edit Default Value
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent card click
-                            handleDeleteColumn(header);
-                          }}
-                          className="flex items-center gap-2 text-destructive"
-                        >
-                          <Trash className="h-4 w-4" />
-                          Delete Column
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-
-                  {editingDefault === header && (
-                    <Popover 
-                      open={true} 
-                      onOpenChange={(open) => {
-                        if (!open) {
-                          setEditingDefault(null);
-                        }
-                      }}
-                    >
-                      <PopoverContent 
-                        className="w-80" 
-                        align="end" 
-                        onClick={(e) => e.stopPropagation()} // Prevent card click
-                      >
-                        <div className="grid gap-4">
-                          <div className="space-y-2">
-                            <h4 className="font-medium leading-none">Edit Default Value</h4>
-                            <p className="text-sm text-muted-foreground">
-                              Set the default value for this custom column
-                            </p>
-                          </div>
-                          <div className="grid gap-2">
-                            <Label htmlFor={`default-${header}`}>Default Value</Label>
-                            <Input
-                              id={`default-${header}`}
-                              defaultValue={columnConfig[header]?.defaultValue}
-                              onKeyDown={(e) => {
-                                e.stopPropagation(); // Prevent card click
-                                if (e.key === 'Enter') {
-                                  handleDefaultValueChange(header, e.currentTarget.value);
-                                }
-                                if (e.key === 'Escape') {
-                                  setEditingDefault(null);
-                                }
-                              }}
-                              onBlur={(e) => {
-                                e.stopPropagation(); // Prevent card click
-                                handleDefaultValueChange(header, e.target.value);
-                              }}
-                              placeholder="Enter default value"
-                              autoFocus
-                              onClick={(e) => e.stopPropagation()} // Prevent card click
-                            />
-                          </div>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

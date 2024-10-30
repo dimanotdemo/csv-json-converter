@@ -15,6 +15,54 @@ interface FileUploadProps {
   headerConfig: HeaderConfig;
 }
 
+const processCSVContent = (content: string): string => {
+  let inQuotes = false;
+  let currentField = '';
+  let buffer = '';
+
+  // First normalize line endings
+  const normalized = content.replace(/\r\n|\r/g, '\n');
+
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
+    const nextChar = normalized[i + 1];
+
+    if (char === '"') {
+      if (!inQuotes) {
+        // Starting quoted field
+        inQuotes = true;
+        buffer += char;
+      } else if (nextChar === '"') {
+        // Escaped quote
+        buffer += char + nextChar;
+        i++; // Skip next quote
+      } else {
+        // Ending quoted field
+        inQuotes = false;
+        // If we have collected content, join it properly
+        if (currentField) {
+          buffer += currentField.replace(/\n+/g, ' ').trim();
+          currentField = '';
+        }
+        buffer += char;
+      }
+    } else if (inQuotes) {
+      if (char === '\n') {
+        // Inside quotes, collect content but don't add newline yet
+        if (currentField) {
+          currentField += ' ';
+        }
+      } else {
+        currentField += char;
+      }
+    } else {
+      buffer += char;
+    }
+  }
+
+  return buffer;
+};
+
 export default function FileUpload({ onFileSelect, currentFileName, headerConfig }: FileUploadProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -51,15 +99,14 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
 
       reader.onload = (e) => {
         const content = e.target?.result as string;
-        console.log('File Upload');
-        console.log('File content length:', content.length);
-        console.log('First 100 characters:', content.slice(0, 100));
+        // Process the CSV content before passing it on
+        const processedContent = processCSVContent(content);
         
-        setFileContent(content);
-        onFileSelect(content, file.name);
+        setFileContent(processedContent);
+        onFileSelect(processedContent, file.name);
         
         try {
-          parseCSV(content, headerConfig);
+          parseCSV(processedContent, headerConfig);
         } catch (parseError) {
           console.error('CSV parsing error:', parseError);
         }

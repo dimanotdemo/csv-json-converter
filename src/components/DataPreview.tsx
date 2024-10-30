@@ -183,35 +183,41 @@ export default function DataPreview({
                 <Table>
                   <TableHeader className="sticky top-0 bg-background border-b">
                     <TableRow>
-                      {visibleHeaders.map((header, index) => (
-                        <TableHead
-                          key={`header-${index}-${header}`}
-                          className={cn(
-                            "relative select-none bg-background",
-                            resizingColumn === header && "bg-muted"
-                          )}
-                          style={{ width: columnWidths[header] }}
-                          data-column={header}
-                        >
-                          <div className="flex items-center pr-6">
-                            <span className="truncate">
-                              {columnConfig[header]?.mappedName || header}
-                            </span>
-                            <div
-                              className={cn(
-                                "absolute right-0 top-0 bottom-0 w-6 cursor-col-resize select-none flex items-center justify-center",
-                                "after:content-[''] after:absolute after:right-2 after:w-px after:h-4/5 after:bg-border",
-                                "hover:after:bg-foreground",
-                                resizingColumn === header && "after:bg-foreground"
-                              )}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleResizeStart(header);
-                              }}
-                            />
-                          </div>
-                        </TableHead>
-                      ))}
+                      {visibleHeaders.map((header, index) => {
+                        // Get display name for header (handle blank case)
+                        const displayName = columnConfig[header]?.mappedName || 
+                          (header.trim() === '' ? 'BLANK' : header);
+
+                        return (
+                          <TableHead
+                            key={`header-${index}-${header}`}
+                            className={cn(
+                              "relative select-none bg-background",
+                              resizingColumn === header && "bg-muted"
+                            )}
+                            style={{ width: columnWidths[header] }}
+                            data-column={header}
+                          >
+                            <div className="flex items-center pr-6">
+                              <span className="truncate">
+                                {displayName}
+                              </span>
+                              <div
+                                className={cn(
+                                  "absolute right-0 top-0 bottom-0 w-6 cursor-col-resize select-none flex items-center justify-center",
+                                  "after:content-[''] after:absolute after:right-2 after:w-px after:h-4/5 after:bg-border",
+                                  "hover:after:bg-foreground",
+                                  resizingColumn === header && "after:bg-foreground"
+                                )}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleResizeStart(header);
+                                }}
+                              />
+                            </div>
+                          </TableHead>
+                        );
+                      })}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
