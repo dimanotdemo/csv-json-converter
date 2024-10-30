@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Download } from 'lucide-react';
+import { Button } from "@/components/ui/button";
 import FileUpload from './components/FileUpload';
 import HeaderConfigPanel from './components/HeaderConfig';
 import ColumnManager from './components/ColumnManager';
@@ -81,7 +82,20 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 relative pb-16">
+      {csvContent && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <Button
+            size="lg"
+            onClick={handleDownload}
+            className="shadow-lg"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download JSON
+          </Button>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 py-8">
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
@@ -92,19 +106,19 @@ export default function App() {
           </p>
         </header>
 
-        <div className="space-y-8">
-          <FileUpload 
-            onFileSelect={handleFileSelect} 
-            currentFileName={currentFileName} 
+        <div className="space-y-6">
+          <FileUpload
+            onFileSelect={handleFileSelect}
+            currentFileName={currentFileName}
           />
 
-          {parsedData.headers.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Data Preview</h3>
-                <DataPreview data={parsedData} columnConfig={columnConfig} />
-              </div>
-              
+          {csvContent && (
+            <>
+              <DataPreview
+                data={parsedData}
+                columnConfig={columnConfig}
+              />
+
               <HeaderConfigPanel
                 config={headerConfig}
                 onConfigChange={handleHeaderConfigChange}
@@ -115,17 +129,7 @@ export default function App() {
                 columnConfig={columnConfig}
                 onConfigChange={handleColumnConfigChange}
               />
-
-              <div className="flex justify-end">
-                <button
-                  onClick={handleDownload}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  Download JSON
-                </button>
-              </div>
-            </div>
+            </>
           )}
         </div>
       </div>

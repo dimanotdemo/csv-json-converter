@@ -1,6 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ColumnConfig } from '../types/index';
 import { Settings, ArrowRight, Plus } from 'lucide-react';
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ColumnManagerProps {
   headers: string[];
@@ -12,14 +18,42 @@ export default function ColumnManager({ headers, columnConfig, onConfigChange }:
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnDefault, setNewColumnDefault] = useState('');
 
+  // Initialize column config for new headers
+  useEffect(() => {
+    const newConfig = { ...columnConfig };
+    let hasChanges = false;
+
+    headers.forEach(header => {
+      if (!newConfig[header]) {
+        hasChanges = true;
+        newConfig[header] = {
+          originalName: header,
+          mappedName: header,
+          include: true,
+          isMetafield: false,
+          metafieldNamespace: 'custom',
+          metafieldType: 'single_line_text_field',
+          isOption: false,
+          optionSeparator: ',',
+          injectIntoVariants: false
+        };
+      }
+    });
+
+    if (hasChanges) {
+      onConfigChange(newConfig);
+    }
+  }, [headers, columnConfig, onConfigChange]);
+
   const handleConfigChange = (header: string, changes: Partial<ColumnConfig>) => {
-    onConfigChange({
+    const updatedConfig = {
       ...columnConfig,
       [header]: {
         ...columnConfig[header],
         ...changes
       }
-    });
+    };
+    onConfigChange(updatedConfig);
   };
 
   const handleAddColumn = () => {
@@ -58,168 +92,165 @@ export default function ColumnManager({ headers, columnConfig, onConfigChange }:
         Column Configuration
       </h3>
 
-      <div className="bg-gray-50 p-4 rounded-lg border mb-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">Add Custom Column</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-gray-600">Column Name</label>
-            <input
-              type="text"
-              value={newColumnName}
-              onChange={(e) => setNewColumnName(e.target.value)}
-              placeholder="Enter column name"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600">Default Value</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newColumnDefault}
-                onChange={(e) => setNewColumnDefault(e.target.value)}
-                placeholder="Enter default value"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+      <Card>
+        <CardHeader className="pb-3">
+          <h4 className="text-sm font-medium">Add Custom Column</h4>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="columnName">Column Name</Label>
+              <Input
+                id="columnName"
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                placeholder="Enter column name"
               />
-              <button
-                onClick={handleAddColumn}
-                className="mt-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add
-              </button>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="defaultValue">Default Value</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="defaultValue"
+                  value={newColumnDefault}
+                  onChange={(e) => setNewColumnDefault(e.target.value)}
+                  placeholder="Enter default value"
+                />
+                <Button onClick={handleAddColumn} size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {allHeaders.map((header, index) => (
-          <div key={`column-${header}-${index}`} className="bg-white p-4 rounded-lg shadow-sm border">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
+        {allHeaders.map((header) => (
+          <Card key={header}>
+            <CardContent className="pt-6">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`include-${header}`}
                     checked={columnConfig[header]?.include ?? true}
-                    onChange={(e) => handleConfigChange(header, { include: e.target.checked })}
-                    className="mr-2"
+                    onCheckedChange={(checked) => 
+                      handleConfigChange(header, { include: checked as boolean })
+                    }
                   />
-                  <span className="font-medium">{header}</span>
-                </label>
-              </div>
+                  <Label htmlFor={`include-${header}`}>{header}</Label>
+                </div>
 
-              {columnConfig[header]?.include && (
-                <div className="space-y-3 pl-6">
-                  <div>
-                    <label className="block text-sm text-gray-600">
-                      Map to name:
+                {columnConfig[header]?.include && (
+                  <div className="space-y-4 pl-6">
+                    <div className="space-y-2">
+                      <Label htmlFor={`mapped-${header}`}>Map to name:</Label>
                       <div className="flex items-center gap-2">
-                        <span className="text-gray-400">{header}</span>
+                        <span className="text-muted-foreground">{header}</span>
                         <ArrowRight className="w-4 h-4" />
-                        <input
-                          type="text"
+                        <Input
+                          id={`mapped-${header}`}
                           value={columnConfig[header]?.mappedName || ''}
                           onChange={(e) => handleConfigChange(header, { mappedName: e.target.value })}
                           placeholder={header}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                         />
                       </div>
-                    </label>
-                  </div>
+                    </div>
 
-                  <div className="space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={columnConfig[header]?.isMetafield ?? false}
-                        onChange={(e) => handleConfigChange(header, { isMetafield: e.target.checked })}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Convert to Metafield</span>
-                    </label>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`metafield-${header}`}
+                          checked={columnConfig[header]?.isMetafield ?? false}
+                          onCheckedChange={(checked) => 
+                            handleConfigChange(header, { isMetafield: checked as boolean })
+                          }
+                        />
+                        <Label htmlFor={`metafield-${header}`}>Convert to Metafield</Label>
+                      </div>
 
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={columnConfig[header]?.isOption ?? false}
-                        onChange={(e) => handleConfigChange(header, { isOption: e.target.checked })}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Convert to Option</span>
-                    </label>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`option-${header}`}
+                          checked={columnConfig[header]?.isOption ?? false}
+                          onCheckedChange={(checked) => 
+                            handleConfigChange(header, { isOption: checked as boolean })
+                          }
+                        />
+                        <Label htmlFor={`option-${header}`}>Convert to Option</Label>
+                      </div>
 
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={columnConfig[header]?.injectIntoVariants ?? false}
-                        onChange={(e) => handleConfigChange(header, { injectIntoVariants: e.target.checked })}
-                        className="mr-2"
-                      />
-                      <span className="text-sm">Insert into Variants</span>
-                    </label>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`variants-${header}`}
+                          checked={columnConfig[header]?.injectIntoVariants ?? false}
+                          onCheckedChange={(checked) => 
+                            handleConfigChange(header, { injectIntoVariants: checked as boolean })
+                          }
+                        />
+                        <Label htmlFor={`variants-${header}`}>Insert into Variants</Label>
+                      </div>
 
-                    {columnConfig[header]?.injectIntoVariants && (
-                      <div className="pl-6">
-                        <label className="block text-sm text-gray-600">
-                          Variant field name:
-                          <input
-                            type="text"
+                      {columnConfig[header]?.injectIntoVariants && (
+                        <div className="pl-6 space-y-2">
+                          <Label htmlFor={`variant-field-${header}`}>Variant field name:</Label>
+                          <Input
+                            id={`variant-field-${header}`}
                             value={columnConfig[header]?.variantFieldName || ''}
                             onChange={(e) => handleConfigChange(header, { variantFieldName: e.target.value })}
                             placeholder={header}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                           />
-                        </label>
-                      </div>
-                    )}
+                        </div>
+                      )}
 
-                    {columnConfig[header]?.isMetafield && (
-                      <div className="pl-6 space-y-2">
-                        <label className="block text-sm text-gray-600">
-                          Type:
-                          <select
-                            value={columnConfig[header]?.metafieldType || 'single_line_text_field'}
-                            onChange={(e) => handleConfigChange(header, { metafieldType: e.target.value })}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                          >
-                            <option value="single_line_text_field">Text</option>
-                            <option value="number_integer">Number</option>
-                            <option value="boolean">Boolean</option>
-                            <option value="date">Date</option>
-                          </select>
-                        </label>
+                      {columnConfig[header]?.isMetafield && (
+                        <div className="pl-6 space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor={`metafield-type-${header}`}>Type:</Label>
+                            <Select
+                              value={columnConfig[header]?.metafieldType || 'single_line_text_field'}
+                              onValueChange={(value) => handleConfigChange(header, { metafieldType: value })}
+                            >
+                              <SelectTrigger id={`metafield-type-${header}`}>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="single_line_text_field">Text</SelectItem>
+                                <SelectItem value="number_integer">Number</SelectItem>
+                                <SelectItem value="boolean">Boolean</SelectItem>
+                                <SelectItem value="date">Date</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
 
-                        <label className="block text-sm text-gray-600">
-                          Namespace:
-                          <input
-                            type="text"
-                            value={columnConfig[header]?.metafieldNamespace || 'custom'}
-                            onChange={(e) => handleConfigChange(header, { metafieldNamespace: e.target.value })}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                          />
-                        </label>
-                      </div>
-                    )}
+                          <div className="space-y-2">
+                            <Label htmlFor={`namespace-${header}`}>Namespace:</Label>
+                            <Input
+                              id={`namespace-${header}`}
+                              value={columnConfig[header]?.metafieldNamespace || 'custom'}
+                              onChange={(e) => handleConfigChange(header, { metafieldNamespace: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      )}
 
-                    {columnConfig[header]?.isOption && (
-                      <div className="pl-6">
-                        <label className="block text-sm text-gray-600">
-                          Value separator:
-                          <input
-                            type="text"
+                      {columnConfig[header]?.isOption && (
+                        <div className="pl-6 space-y-2">
+                          <Label htmlFor={`separator-${header}`}>Value separator:</Label>
+                          <Input
+                            id={`separator-${header}`}
                             value={columnConfig[header]?.optionSeparator || ','}
                             onChange={(e) => handleConfigChange(header, { optionSeparator: e.target.value })}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                           />
-                        </label>
-                      </div>
-                    )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>
