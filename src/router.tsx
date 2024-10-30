@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { LandingPage } from './components/landing-page';
-import App from './App';
+import ConvertPage from './pages/convert';
 
 export const router = createBrowserRouter([
   {
@@ -9,6 +9,6 @@ export const router = createBrowserRouter([
   },
   {
     path: '/convert',
-    element: <App />,
+    element: <ConvertPage />,
   },
 ]); 

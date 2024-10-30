@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import FileUpload from './components/FileUpload';
 import ColumnManager from './components/ColumnManager';
 import DataPreview from './components/DataPreview';
@@ -12,7 +12,11 @@ import { normalizeJson } from '@/utils/normalizeJson';
 import { Footer } from "@/components/ui/footer"
 import { Header } from "@/components/ui/header"
 
-export default function App() {
+export interface AppHandle {
+  handleFileSelect: (content: string, fileName: string) => void
+}
+
+const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
   const [parsedData, setParsedData] = useState<ParsedData>({
     headers: [],
     rows: [],
@@ -51,9 +55,11 @@ export default function App() {
   }, [columnConfig]);
 
   const handleFileSelect = useCallback((content: string, fileName: string) => {
+    console.log('handleFileSelect called with:', { contentLength: content.length, fileName })
     setCsvContent(content);
     setCurrentFileName(fileName);
     const data = parseCSV(content, headerConfig);
+    console.log('Parsed data:', data)
     setParsedData(data);
     setColumnConfig(initializeColumnConfig(data.headers, data.secondRowHeaders));
   }, [headerConfig, initializeColumnConfig]);
@@ -93,6 +99,10 @@ export default function App() {
     setColumnConfig(newConfig);
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    handleFileSelect
+  }), [handleFileSelect])
+
   return (
     <div className="min-h-screen bg-gray-50 relative flex flex-col">
       <Header />
@@ -118,16 +128,21 @@ export default function App() {
               CSV to JSON Converter
             </h1>
             <p className="text-gray-600">
-              Upload your CSV file, configure the conversion settings, and download the result
+              {props.hideUpload 
+                ? "Preview your demo data and experiment with the converter"
+                : "Upload your CSV file, configure the conversion settings, and download the result"
+              }
             </p>
           </header>
 
           <div className="space-y-6">
-            <FileUpload
-              onFileSelect={handleFileSelect}
-              currentFileName={currentFileName}
-              headerConfig={headerConfig}
-            />
+            {!props.hideUpload && (
+              <FileUpload
+                onFileSelect={handleFileSelect}
+                currentFileName={currentFileName}
+                headerConfig={headerConfig}
+              />
+            )}
 
             {csvContent && (
               <Tabs defaultValue="preview" className="space-y-6">
@@ -167,4 +182,6 @@ export default function App() {
       <Footer />
     </div>
   );
-}
+})
+
+export default App
