@@ -1,22 +1,6 @@
-import { ParsedData, ColumnConfig, toLowerKeys } from '@/types';
+import { ParsedData, ColumnConfig } from '@/types';
 import { CartesianOptions, VariantData } from '@/types';
 import { cleanValue, generateVariants, cleanupNullValues } from './helpers';
-
-interface ConversionOptions {
-  dateFormat?: string;
-  numberFormat?: string;
-  booleanTrueValues?: string[];
-  booleanFalseValues?: string[];
-  nullValues?: string[];
-}
-
-const defaultOptions: ConversionOptions = {
-  dateFormat: 'YYYY-MM-DD',
-  numberFormat: '.',
-  booleanTrueValues: ['true', 'yes', '1', 'on'],
-  booleanFalseValues: ['false', 'no', '0', 'off'],
-  nullValues: ['null', 'undefined', 'nil', ''],
-};
 
 interface Metafield {
   key: string;
@@ -35,16 +19,53 @@ interface JsonObject {
   [key: string]: BaseJsonValue | ArrayTypes | undefined;
 }
 
+// Add a type guard
+function isStringRecord(obj: unknown): obj is Record<string, string> {
+  if (typeof obj !== 'object' || obj === null) return false;
+  return Object.values(obj).every(value => typeof value === 'string');
+}
+
+// Helper function to normalize keys
+function normalizeKey(key: string): string {
+  return key
+    .toLowerCase()
+    .replace(/[\s-/]+/g, '_') // Replace spaces, hyphens, and forward slashes with underscores
+    .replace(/[^a-z0-9_]/g, '') // Remove any other special characters
+    .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
+}
+
+// Helper function to convert keys to lowercase and replace spaces with underscores
+function toLowerKeys<T extends Record<string, unknown>>(obj: T): T {
+  if (Array.isArray(obj)) {
+    const result = obj.map(item => 
+      typeof item === 'object' && item !== null
+        ? toLowerKeys(item as Record<string, unknown>)
+        : item
+    );
+    return result as unknown as T;
+  }
+  
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [
+        normalizeKey(key),
+        typeof value === 'object' && value !== null
+          ? toLowerKeys(value as Record<string, unknown>)
+          : value
+      ])
+    ) as T;
+  }
+  
+  return obj;
+}
+
 export function convertToJSON(
   data: ParsedData,
-  columnConfig: Record<string, ColumnConfig>,
-  options: ConversionOptions = {}
+  columnConfig: Record<string, ColumnConfig>
 ): JsonObject[] {
-  const opts = { ...defaultOptions, ...options };
-
   // Helper function to detect and convert value types
   const convertValue = (value: string | null, type?: string): string | number | boolean | null => {
-    if (!value || opts.nullValues?.includes(value.toLowerCase())) {
+    if (!value || value.toLowerCase() === 'null') {
       return null;
     }
 
@@ -55,8 +76,8 @@ export function convertToJSON(
 
     if (type === 'boolean') {
       const lowerValue = value.toLowerCase();
-      if (opts.booleanTrueValues?.includes(lowerValue)) return true;
-      if (opts.booleanFalseValues?.includes(lowerValue)) return false;
+      if (['true', 'yes', '1', 'on'].includes(lowerValue)) return true;
+      if (['false', 'no', '0', 'off'].includes(lowerValue)) return false;
       return value;
     }
 
@@ -84,15 +105,15 @@ export function convertToJSON(
 
       // Use BLANK for empty header if it's not mapped
       const effectiveHeader = header || "BLANK";
-      // Ensure mapped name is lowercase
-      const mappedName = (config.mappedName || effectiveHeader).toLowerCase();
+      // Ensure mapped name is normalized
+      const mappedName = normalizeKey(config.mappedName || effectiveHeader);
       
       if (config.isMetafield) {
         metafields.push({
-          key: mappedName.replace(/\s+/g, '_'),
+          key: normalizeKey(mappedName),
           value: value,
           type: config.metafieldType || 'string',
-          namespace: (config.metafieldNamespace || 'custom').toLowerCase()
+          namespace: normalizeKey(config.metafieldNamespace || 'custom')
         });
       } else if (config.isOption) {
         const values = value
@@ -107,16 +128,29 @@ export function convertToJSON(
           });
         }
       } else if (config.injectIntoVariants) {
-        // Ensure variant field names are lowercase
-        const variantFieldName = (config.variantFieldName || mappedName).toLowerCase();
-        variantFields[variantFieldName] = value;
+        variantFields[mappedName] = value;
       } else {
-        // Use lowercase mapped name for the field
         jsonObject[mappedName] = convertValue(value, config.metafieldType);
       }
     });
 
-    // Add arrays to object with lowercase keys
+    // Process custom columns
+    Object.entries(columnConfig)
+      .filter(([, config]) => config.isCustom && config.include)
+      .forEach(([header, config]) => {
+        const value = config.defaultValue;
+        if (!value || value.toLowerCase() === 'null') return;
+
+        const mappedName = (config.mappedName || header).toLowerCase();
+        
+        if (config.injectIntoVariants) {
+          variantFields[mappedName] = value;
+        } else {
+          jsonObject[mappedName] = value;
+        }
+      });
+
+    // Add arrays to object
     if (metafields.length > 0) {
       jsonObject.metafields = metafields;
     }
@@ -127,15 +161,30 @@ export function convertToJSON(
 
     // Generate variants if options exist
     if (options.length > 0 || Object.keys(variantFields).length > 0) {
-      const variants = generateVariants(options, variantFields, (jsonObject.sku as string)?.toLowerCase());
-      if (variants.length > 0) {
-        jsonObject.variants = variants;
+      const lowercaseVariantFields = toLowerKeys(variantFields);
+      
+      if (isStringRecord(lowercaseVariantFields)) {
+        const variants = generateVariants(
+          options,
+          lowercaseVariantFields,
+          (jsonObject.sku as string)?.toLowerCase()
+        );
+        
+        if (variants.length > 0) {
+          jsonObject.variants = variants.map(variant => 
+            toLowerKeys(variant)
+          );
+        }
       }
     }
 
-    return cleanupNullValues(jsonObject) as JsonObject;
+    // Convert all keys to lowercase recursively before returning
+    return toLowerKeys(cleanupNullValues(jsonObject)) as JsonObject;
   });
 
-  // Convert all keys to lowercase
-  return toLowerKeys(result) as JsonObject[];
+  // Update the final conversion to use a more flexible type
+  return result.map(obj => {
+    const converted = toLowerKeys(cleanupNullValues(obj));
+    return converted as JsonObject;
+  });
 }

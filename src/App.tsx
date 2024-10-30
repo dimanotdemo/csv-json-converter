@@ -8,6 +8,7 @@ import DownloadButton from '@/components/DownloadButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, Columns } from 'lucide-react';
 import JsonPreview from '@/components/JsonPreview';
+import { normalizeJson } from '@/utils/normalizeJson';
 
 export default function App() {
   const [parsedData, setParsedData] = useState<ParsedData>({
@@ -67,7 +68,9 @@ export default function App() {
   const handleDownload = async () => {
     return new Promise<void>((resolve) => {
       const jsonContent = convertToJSON(parsedData, columnConfig);
-      const blob = new Blob([JSON.stringify(jsonContent, null, 2)], {
+      const normalizedJson = normalizeJson(jsonContent);
+      
+      const blob = new Blob([JSON.stringify(normalizedJson, null, 2)], {
         type: 'application/json',
       });
       
