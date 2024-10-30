@@ -93,9 +93,14 @@ export function LandingPage() {
       setIsLoading(true)
       setIsConverted(false)
       
-      const currentIndex = EXAMPLE_DATASETS.findIndex(d => d.name === currentDataset.name)
-      const nextIndex = (currentIndex + 1) % EXAMPLE_DATASETS.length
-      setCurrentDataset(EXAMPLE_DATASETS[nextIndex])
+      // Get a random dataset that's different from the current one
+      let nextDataset
+      do {
+        const randomIndex = Math.floor(Math.random() * EXAMPLE_DATASETS.length)
+        nextDataset = EXAMPLE_DATASETS[randomIndex]
+      } while (nextDataset.name === currentDataset.name)
+      
+      setCurrentDataset(nextDataset)
       
       setTimeout(() => {
         setIsConverted(true)
