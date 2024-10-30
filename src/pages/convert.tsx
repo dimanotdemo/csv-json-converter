@@ -3,13 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { EXAMPLE_DATASETS } from '@/data/example-datasets'
 import { motion, AnimatePresence } from "framer-motion"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function ConvertPage() {
   const [searchParams] = useSearchParams()
   const isDemo = searchParams.get('demo') === 'true'
   const appRef = useRef<AppHandle>(null)
   const [isLoading, setIsLoading] = useState(isDemo)
+  const [showUpload, setShowUpload] = useState(false)
 
   useEffect(() => {
     if (!isDemo) {
@@ -42,10 +44,28 @@ export default function ConvertPage() {
     return () => clearTimeout(timer)
   }, [isDemo])
 
+  const handleUploadClick = () => {
+    setShowUpload(true)
+  }
+
   return (
     <>
       <div style={{ display: isLoading ? 'none' : 'block' }}>
-        <App ref={appRef} hideUpload={isDemo} />
+        <App ref={appRef} hideUpload={isDemo && !showUpload} />
+        
+        {/* Add Upload Button when in demo mode and upload not shown */}
+        {isDemo && !showUpload && (
+          <div className="fixed bottom-4 left-4 z-50">
+            <Button 
+              size="lg"
+              onClick={handleUploadClick}
+              className="shadow-lg"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Upload Your CSV
+            </Button>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>

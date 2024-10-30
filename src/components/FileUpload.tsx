@@ -2,12 +2,13 @@ import { useState, useCallback, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
-import { FileText, Upload, Loader2, AlertCircle, Clipboard } from 'lucide-react';
+import { FileText, Upload, Loader2, AlertCircle, Clipboard, X } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { parseCSV } from '@/utils/csvParser/parser';
 import { HeaderConfig } from '@/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 interface FileUploadProps {
   onFileSelect: (content: string, fileName: string) => void;
@@ -71,62 +72,94 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
   const [fileContent, setFileContent] = useState<string>('');
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
   const [pasteContent, setPasteContent] = useState('');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isDemo = searchParams.get('demo') === 'true';
+
+  const clearDemoMode = useCallback(() => {
+    if (searchParams.get('demo') === 'true') {
+      navigate('/convert', { replace: true });
+    }
+  }, [navigate, searchParams]);
+
+  const simulateProgress = (callback: () => void) => {
+    setIsProcessing(true)
+    setUploadProgress(0)
+
+    // Simulate file processing with a smooth progress animation
+    const startTime = Date.now()
+    const duration = 1500 // 1.5 seconds total
+    
+    const updateProgress = () => {
+      const elapsed = Date.now() - startTime
+      const progress = Math.min((elapsed / duration) * 100, 90) // Max 90% until actual completion
+      
+      setUploadProgress(progress)
+      
+      if (elapsed < duration) {
+        requestAnimationFrame(updateProgress)
+      } else {
+        // Execute the actual callback
+        callback()
+        // Complete the progress
+        setTimeout(() => {
+          setUploadProgress(100)
+          setTimeout(() => {
+            setIsProcessing(false)
+          }, 300) // Short delay before hiding progress
+        }, 200)
+      }
+    }
+
+    requestAnimationFrame(updateProgress)
+  }
 
   const processFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setError('Please select a CSV file');
-      return;
+      setError('Please select a CSV file')
+      return
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError('File size must be less than 10MB');
-      return;
+      setError('File size must be less than 10MB')
+      return
     }
 
-    setError(null);
-    setIsProcessing(true);
-    setUploadProgress(0);
+    setError(null)
 
     try {
-      const reader = new FileReader();
+      const reader = new FileReader()
       
-      reader.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const progress = (e.loaded / e.total) * 100;
-          setUploadProgress(Math.min(90, progress));
-        }
-      };
-
       reader.onload = (e) => {
-        const content = e.target?.result as string;
-        // Process the CSV content before passing it on
-        const processedContent = processCSVContent(content);
+        const content = e.target?.result as string
         
-        setFileContent(processedContent);
-        onFileSelect(processedContent, file.name);
-        
-        try {
-          parseCSV(processedContent, headerConfig);
-        } catch (parseError) {
-          console.error('CSV parsing error:', parseError);
-        }
-
-        setUploadProgress(100);
-        setIsProcessing(false);
-      };
+        // Simulate processing with progress animation
+        simulateProgress(() => {
+          const processedContent = processCSVContent(content)
+          setFileContent(processedContent)
+          onFileSelect(processedContent, file.name)
+          clearDemoMode() // Remove demo parameter after successful upload
+          
+          try {
+            parseCSV(processedContent, headerConfig)
+          } catch (parseError) {
+            console.error('CSV parsing error:', parseError)
+          }
+        })
+      }
 
       reader.onerror = () => {
-        setError('Error reading file');
-        setIsProcessing(false);
-      };
+        setError('Error reading file')
+        setIsProcessing(false)
+      }
 
-      reader.readAsText(file);
+      reader.readAsText(file)
     } catch (processError) {
-      console.error('File processing error:', processError);
-      setError('Error processing file');
-      setIsProcessing(false);
+      console.error('File processing error:', processError)
+      setError('Error processing file')
+      setIsProcessing(false)
     }
-  }, [onFileSelect, headerConfig]);
+  }, [onFileSelect, headerConfig, clearDemoMode])
 
   useEffect(() => {
     if (fileContent) {
@@ -137,6 +170,17 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
       }
     }
   }, [fileContent, headerConfig]);
+
+  useEffect(() => {
+    if (isDemo && !currentFileName) {
+      // Pre-populate with demo file
+      const demoFileName = "demo.csv";
+      // You should replace this with your actual demo CSV content
+      const demoContent = "header1,header2,header3\nvalue1,value2,value3";
+      setFileContent(demoContent);
+      onFileSelect(demoContent, demoFileName);
+    }
+  }, [isDemo, currentFileName, onFileSelect]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -156,45 +200,38 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
   }, [processFile]);
 
   const handlePaste = useCallback(async (content: string) => {
-    setError(null);
-    setIsProcessing(true);
-    setUploadProgress(0);
+    setError(null)
 
     try {
-      const firstLine = content.trim().split('\n')[0];
+      const firstLine = content.trim().split('\n')[0]
       if (!firstLine || firstLine.length === 0) {
-        throw new Error('Content appears to be empty');
+        throw new Error('Content appears to be empty')
       }
 
-      const lines = content.trim().split('\n');
+      const lines = content.trim().split('\n')
       if (lines.length < 2) {
-        throw new Error('Content needs at least a header row and one data row');
+        throw new Error('Content needs at least a header row and one data row')
       }
 
-      setUploadProgress(30);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setUploadProgress(60);
-
-      // Process the pasted content the same way we process file content
-      const processedContent = processCSVContent(content);
-      
-      setFileContent(processedContent);
-      onFileSelect(processedContent, 'pasted-content.csv');
-      
-      try {
-        parseCSV(processedContent, headerConfig);
-      } catch (parseError) {
-        console.error('CSV parsing error:', parseError);
-        throw new Error('Failed to parse CSV content. Please check the format.');
-      }
-
-      setUploadProgress(100);
+      // Simulate processing with progress animation
+      simulateProgress(() => {
+        const processedContent = processCSVContent(content)
+        setFileContent(processedContent)
+        onFileSelect(processedContent, 'pasted-content.csv')
+        clearDemoMode() // Remove demo parameter after successful paste
+        
+        try {
+          parseCSV(processedContent, headerConfig)
+        } catch (parseError) {
+          console.error('CSV parsing error:', parseError)
+          throw new Error('Failed to parse CSV content. Please check the format.')
+        }
+      })
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to process pasted content');
-    } finally {
-      setIsProcessing(false);
+      setError(error instanceof Error ? error.message : 'Failed to process pasted content')
+      setIsProcessing(false)
     }
-  }, [onFileSelect, headerConfig]);
+  }, [onFileSelect, headerConfig, clearDemoMode])
 
   const handlePasteSubmit = () => {
     handlePaste(pasteContent);
@@ -209,6 +246,19 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
           <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-primary" />
             <span className="text-sm font-medium">{currentFileName}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => {
+                setFileContent('')
+                onFileSelect('', '')
+                setError(null)
+                clearDemoMode()
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
           
           <div className="flex gap-2">
@@ -278,6 +328,10 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
         )}
       </Card>
     );
+  }
+
+  if (isDemo) {
+    return null;
   }
 
   return (

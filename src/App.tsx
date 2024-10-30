@@ -3,7 +3,8 @@ import FileUpload from './components/FileUpload';
 import ColumnManager from './components/ColumnManager';
 import DataPreview from './components/DataPreview';
 import { ParsedData, HeaderConfig, ColumnConfig } from './types/index';
-import { parseCSV, convertToJSON } from './utils/csvParser';
+import { parseCSV } from './utils/csvParser';
+import { convertToJSON } from './utils/csvParser/converter';
 import DownloadButton from '@/components/DownloadButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, Columns } from 'lucide-react';
@@ -35,6 +36,7 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
   const [columnConfig, setColumnConfig] = useState<Record<string, ColumnConfig>>({});
   const [csvContent, setCsvContent] = useState<string>('');
   const [currentFileName, setCurrentFileName] = useState<string>('');
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
 
   const initializeColumnConfig = useCallback((headers: string[], secondRowHeaders: string[]) => {
     const newColumnConfig: Record<string, ColumnConfig> = {};
@@ -61,6 +63,7 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
     const data = parseCSV(content, headerConfig);
     console.log('Parsed data:', data)
     setParsedData(data);
+    setColumnOrder(data.headers);
     setColumnConfig(initializeColumnConfig(data.headers, data.secondRowHeaders));
   }, [headerConfig, initializeColumnConfig]);
 
@@ -75,7 +78,8 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
 
   const handleDownload = async () => {
     return new Promise<void>((resolve) => {
-      const jsonContent = convertToJSON(parsedData, columnConfig);
+      console.log('Downloading with column order:', columnOrder);
+      const jsonContent = convertToJSON(parsedData, columnConfig, columnOrder);
       const normalizedJson = normalizeJson(jsonContent);
       
       const blob = new Blob([JSON.stringify(normalizedJson, null, 2)], {
@@ -91,12 +95,17 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
         a.click();
         URL.revokeObjectURL(url);
         resolve();
-      }, 800);
+      }, 100);
     });
   };
 
   const handleColumnConfigChange = useCallback((newConfig: Record<string, ColumnConfig>) => {
     setColumnConfig(newConfig);
+  }, []);
+
+  const handleColumnOrderChange = useCallback((newOrder: string[]) => {
+    console.log('Column order changed:', newOrder);
+    setColumnOrder(newOrder);
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -113,6 +122,7 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
             <JsonPreview 
               parsedData={parsedData}
               columnConfig={columnConfig}
+              columnOrder={columnOrder}
               className="shadow-lg"
             />
             <DownloadButton 
@@ -171,6 +181,7 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
                     headers={parsedData.headers}
                     columnConfig={columnConfig}
                     onConfigChange={handleColumnConfigChange}
+                    onOrderChange={handleColumnOrderChange}
                   />
                 </TabsContent>
               </Tabs>

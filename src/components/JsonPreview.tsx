@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
 import { ParsedData, ColumnConfig } from '@/types';
-import { convertToJSON } from '@/utils/csvParser';
+import { convertToJSON } from '@/utils/csvParser/converter';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-json';
@@ -12,21 +12,21 @@ import { normalizeJson } from '@/utils/normalizeJson';
 interface JsonPreviewProps {
   parsedData: ParsedData;
   columnConfig: Record<string, ColumnConfig>;
+  columnOrder?: string[];
   className?: string;
 }
 
-export default function JsonPreview({ parsedData, columnConfig, className }: JsonPreviewProps) {
+export default function JsonPreview({ parsedData, columnConfig, columnOrder, className }: JsonPreviewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [jsonContent, setJsonContent] = useState<string>('');
   const [highlightedContent, setHighlightedContent] = useState<string>('');
 
-  const generatePreview = useCallback(() => {
-    const json = convertToJSON(parsedData, columnConfig);
+  useEffect(() => {
+    const json = convertToJSON(parsedData, columnConfig, columnOrder);
     const normalizedJson = normalizeJson(json);
     const formatted = JSON.stringify(normalizedJson, null, 2);
     setJsonContent(formatted);
-    setIsOpen(true);
-  }, [parsedData, columnConfig]);
+  }, [parsedData, columnConfig, columnOrder]);
 
   useEffect(() => {
     if (jsonContent) {
@@ -39,6 +39,10 @@ export default function JsonPreview({ parsedData, columnConfig, className }: Jso
     }
   }, [jsonContent]);
 
+  const handlePreviewClick = useCallback(() => {
+    setIsOpen(true);
+  }, []);
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
@@ -46,7 +50,7 @@ export default function JsonPreview({ parsedData, columnConfig, className }: Jso
           variant="outline"
           size="lg"
           className={className}
-          onClick={generatePreview}
+          onClick={handlePreviewClick}
         >
           <Eye className="w-4 h-4 mr-2" />
           Preview JSON

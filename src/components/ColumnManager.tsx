@@ -1,4 +1,4 @@
-import { useState, useEffect, isValidElement } from 'react';
+import { useState, useEffect, isValidElement, useMemo, useCallback } from 'react';
 import { ColumnConfig } from '../types/index';
 import { Settings, GripVertical } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -20,11 +20,17 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
 
 interface ColumnManagerProps {
   headers: string[];
   columnConfig: Record<string, ColumnConfig>;
   onConfigChange: (config: Record<string, ColumnConfig>) => void;
+  onOrderChange?: (order: string[]) => void;
 }
 
 interface DraggableColumnCardProps {
@@ -214,13 +220,19 @@ function normalizeKey(key: string): string {
     .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
 }
 
-const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerProps): JSX.Element => {
+const ColumnManager = ({ 
+  headers, 
+  columnConfig, 
+  onConfigChange,
+  onOrderChange 
+}: ColumnManagerProps): JSX.Element => {
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnDefault, setNewColumnDefault] = useState('');
   const [editingName, setEditingName] = useState<string | null>(null);
   const [pendingChanges, setPendingChanges] = useState<Record<string, Partial<ColumnConfig>>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
+  const [groupOrders, setGroupOrders] = useState<Record<string, string[]>>({});
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -337,18 +349,37 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
     display: header.trim() === '' ? 'BLANK' : header
   }));
 
-  const getEffectiveGroup = (header: string, config: ColumnConfig) => {
+  const getEffectiveGroup = useCallback((header: string, config: ColumnConfig) => {
     const pendingChange = pendingChanges[header];
     if (!pendingChange) return getGroup(config);
     return getGroup({ ...config, ...pendingChange });
-  };
+  }, [pendingChanges]);
 
   // Group headers including pending changes
-  const groupedHeaders = effectiveHeaders.reduce((acc, { original }) => {
-    const group = getEffectiveGroup(original, columnConfig[original]);
-    acc[group] = [...(acc[group] || []), original];
-    return acc;
-  }, {} as Record<string, string[]>);
+  const groupedHeaders = useMemo(() => {
+    const groups = effectiveHeaders.reduce((acc, { original }) => {
+      const group = getEffectiveGroup(original, columnConfig[original]);
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(original);
+      return acc;
+    }, {} as Record<string, string[]>);
+
+    // Apply saved order for each group
+    Object.keys(groups).forEach(group => {
+      if (groupOrders[group]) {
+        const orderedHeaders = [...groups[group]].sort((a, b) => {
+          const orderA = groupOrders[group].indexOf(a);
+          const orderB = groupOrders[group].indexOf(b);
+          if (orderA === -1) return 1;
+          if (orderB === -1) return -1;
+          return orderA - orderB;
+        });
+        groups[group] = orderedHeaders;
+      }
+    });
+
+    return groups;
+  }, [effectiveHeaders, columnConfig, groupOrders, getEffectiveGroup]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
@@ -363,11 +394,15 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const container = dragOverGroup;
-    const draggedId = event.active.id as string;
-    const actualId = draggedId === '_BLANK_' ? '' : draggedId;
+    const {active, over} = event;
+    
+    if (!over) return;
 
-    if (container && draggedId) {
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Handle dropping into groups (existing functionality)
+    if (['basic', 'metafields', 'options', 'variants'].includes(overId)) {
       let changes: Partial<ColumnConfig> = {};
       
       // Reset all conversion flags
@@ -378,7 +413,7 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
       };
 
       // Set the appropriate flag based on the target container
-      switch (container) {
+      switch (overId) {
         case 'metafields':
           changes.isMetafield = true;
           changes.metafieldNamespace = 'custom';
@@ -390,11 +425,47 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
           break;
         case 'variants':
           changes.injectIntoVariants = true;
-          changes.variantFieldName = columnConfig[actualId].mappedName;
+          changes.variantFieldName = columnConfig[activeId].mappedName;
           break;
       }
 
-      handleConfigChange(actualId, changes);
+      handleConfigChange(activeId, changes);
+    } 
+    // Handle reordering within groups
+    else {
+      const activeHeader = activeId === '_BLANK_' ? '' : activeId;
+      const overHeader = overId === '_BLANK_' ? '' : overId;
+      
+      const activeGroup = getEffectiveGroup(activeHeader, columnConfig[activeHeader]);
+      const overGroup = getEffectiveGroup(overHeader, columnConfig[overHeader]);
+      
+      if (activeGroup === overGroup) {
+        const oldIndex = groupedHeaders[activeGroup].indexOf(activeHeader);
+        const newIndex = groupedHeaders[activeGroup].indexOf(overHeader);
+        
+        if (oldIndex !== newIndex) {
+          const newOrder = arrayMove(groupedHeaders[activeGroup], oldIndex, newIndex);
+          
+          // Calculate the new complete order immediately
+          const newCompleteOrder = Object.values(groupedHeaders).reduce((acc, headers) => {
+            if (headers === groupedHeaders[activeGroup]) {
+              return [...acc, ...newOrder];
+            }
+            return [...acc, ...headers];
+          }, [] as string[]);
+
+          // Update local state
+          setGroupOrders(prev => ({
+            ...prev,
+            [activeGroup]: newOrder
+          }));
+          
+          // Notify parent of order change with the new complete order
+          if (onOrderChange) {
+            onOrderChange(newCompleteOrder);
+          }
+        }
+      }
     }
 
     setActiveId(null);
@@ -495,21 +566,26 @@ const ColumnManager = ({ headers, columnConfig, onConfigChange }: ColumnManagerP
               isEmpty={!groupedHeaders[group]?.length}
             >
               {groupedHeaders[group]?.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {groupedHeaders[group].map((header, index) => (
-                    <DraggableColumnCard
-                      key={header}
-                      header={header}
-                      index={index}
-                      columnConfig={columnConfig}
-                      pendingChanges={pendingChanges}
-                      isDragging={activeId === header}
-                      onConfigChange={handleConfigChange}
-                      onEditName={setEditingName}
-                      editingName={editingName}
-                    />
-                  ))}
-                </div>
+                <SortableContext
+                  items={groupedHeaders[group]}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {groupedHeaders[group].map((header, index) => (
+                      <DraggableColumnCard
+                        key={header}
+                        header={header}
+                        index={index}
+                        columnConfig={columnConfig}
+                        pendingChanges={pendingChanges}
+                        isDragging={activeId === header}
+                        onConfigChange={handleConfigChange}
+                        onEditName={setEditingName}
+                        editingName={editingName}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
               ) : (
                 <div className="h-24 flex items-center justify-center border-2 border-dashed rounded-lg text-muted-foreground text-sm">
                   Drag fields here to convert them to {title.toLowerCase()}
