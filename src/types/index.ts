@@ -1,3 +1,4 @@
+// CSV Data Types
 export interface ParsedData {
   headers: string[];
   rows: string[][];
@@ -6,12 +7,19 @@ export interface ParsedData {
   secondRowHeaders: string[];
 }
 
+export interface SkipCondition {
+  type: 'empty' | 'starts-with' | 'contains' | 'number' | 'specific';
+  value?: string;
+}
+
 export interface HeaderConfig {
   headerRows: number;
   skipRows: number;
   hierarchical: boolean;
+  skipCondition?: SkipCondition;
 }
 
+// Column Configuration Types
 export interface ColumnConfig {
   originalName: string;
   mappedName: string;
@@ -25,4 +33,14 @@ export interface ColumnConfig {
   optionSeparator: string;
   injectIntoVariants?: boolean;
   variantFieldName?: string;
+}
+
+// Variant and Options Types
+export interface CartesianOptions {
+  name: string;
+  values: string[];
+}
+
+export interface VariantData {
+  [key: string]: string;
 }

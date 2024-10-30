@@ -1,4 +1,28 @@
-import { CartesianOptions, VariantData } from './types';
+import { CartesianOptions, VariantData } from '@/types';
+
+interface ValueType {
+  string: string;
+  number: number;
+  boolean: boolean;
+  date: string;
+}
+
+interface Metafield {
+  key: string;
+  value: string;
+  type: string;
+  namespace: string;
+}
+
+type BaseJsonValue = string | number | boolean | null;
+type ArrayTypes = Metafield[] | CartesianOptions[] | VariantData[];
+
+interface JsonObject {
+  metafields?: Metafield[];
+  options?: CartesianOptions[];
+  variants?: VariantData[];
+  [key: string]: BaseJsonValue | ArrayTypes | undefined;
+}
 
 export function cleanValue(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -17,50 +41,91 @@ export function generateVariants(
   variantFields: Record<string, string>,
   baseSku?: string
 ): VariantData[] {
-  if (options.length === 0) return [];
+  if (options.length === 0 && Object.keys(variantFields).length === 0) return [];
 
-  const optionValues = options.map(opt => opt.values);
-  const combinations = cartesianProduct(...optionValues);
+  let variants: VariantData[] = [{ ...variantFields }];
 
-  return combinations.map((combo) => {
-    // Start with all variant fields
-    const variant: VariantData = { ...variantFields };
-    
-    // Add option values (limited to 3 as per Shopify)
-    combo.slice(0, 3).forEach((value, index) => {
-      const cleanedValue = cleanValue(value);
-      if (cleanedValue) {
-        variant[`option${index + 1}`] = cleanedValue;
+  if (options.length > 0) {
+    const optionValues = options.map(opt => opt.values);
+    const combinations = cartesianProduct(...optionValues);
+
+    variants = combinations.map((combo) => {
+      const variant: VariantData = { ...variantFields };
+      
+      combo.slice(0, 3).forEach((value, index) => {
+        const cleanedValue = cleanValue(value);
+        if (cleanedValue) {
+          variant[`option${index + 1}`] = cleanedValue;
+        }
+      });
+      
+      if (baseSku) {
+        const validCombo = combo.filter(v => cleanValue(v));
+        if (validCombo.length > 0) {
+          variant.sku = `${baseSku}-${validCombo.join('-')}`;
+        } else {
+          variant.sku = baseSku;
+        }
       }
+      
+      return variant;
     });
-    
-    // Generate SKU if needed
-    if (baseSku) {
-      const validCombo = combo.filter(v => cleanValue(v));
-      if (validCombo.length > 0) {
-        variant.sku = `${baseSku}-${validCombo.join('-')}`;
-      }
-    }
-    
-    return variant;
-  }).filter(variant => Object.keys(variant).length > 0);
+  }
+
+  return variants.filter(variant => Object.keys(variant).length > 0);
 }
 
-export function cleanupNullValues<T extends Record<string, string | string[] | number | boolean | null | undefined | object[] | object>>(obj: T): Partial<T> {
-  const cleaned: Partial<T> = {};
-  Object.entries(obj).forEach(([key, value]) => {
+export function cleanupNullValues(obj: JsonObject): JsonObject {
+  const result = Object.entries(obj).reduce((acc, [key, value]) => {
+    if (value === null || value === undefined) {
+      return acc;
+    }
+    
     if (Array.isArray(value)) {
       if (value.length > 0) {
-        cleaned[key as keyof T] = value as T[keyof T];
+        acc[key] = value;
       }
-    } else if (typeof value === 'object' && value !== null) {
-      cleaned[key as keyof T] = value as T[keyof T];
-    } else {
-      const cleanedValue = cleanValue(value as string);
-      if (cleanedValue !== null) {
-        cleaned[key as keyof T] = cleanedValue as T[keyof T];
-      }
+      return acc;
     }
-  });
-  return cleaned;
+    
+    if (typeof value === 'object' && value !== null) {
+      return acc;
+    }
+    
+    acc[key] = value as BaseJsonValue;
+    return acc;
+  }, {} as JsonObject);
+
+  return result;
+}
+
+export function detectValueType(value: string): keyof ValueType {
+  if (/^-?\d*\.?\d+$/.test(value)) {
+    return 'number';
+  }
+
+  const lowerValue = value.toLowerCase();
+  if (['true', 'false', 'yes', 'no', '1', '0'].includes(lowerValue)) {
+    return 'boolean';
+  }
+
+  const date = new Date(value);
+  if (!isNaN(date.getTime()) && value.includes('-')) {
+    return 'date';
+  }
+
+  return 'string';
+}
+
+export function formatValue(value: string, type: keyof ValueType): ValueType[keyof ValueType] {
+  switch (type) {
+    case 'number':
+      return parseFloat(value);
+    case 'boolean':
+      return ['true', 'yes', '1'].includes(value.toLowerCase());
+    case 'date':
+      return new Date(value).toISOString();
+    default:
+      return value;
+  }
 }

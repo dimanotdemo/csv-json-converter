@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react';
-import { Download } from 'lucide-react';
-import { Button } from "@/components/ui/button";
 import FileUpload from './components/FileUpload';
-import HeaderConfigPanel from './components/HeaderConfig';
 import ColumnManager from './components/ColumnManager';
 import DataPreview from './components/DataPreview';
 import { ParsedData, HeaderConfig, ColumnConfig } from './types/index';
 import { parseCSV, convertToJSON } from './utils/csvParser';
+import DownloadButton from '@/components/DownloadButton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, Columns } from 'lucide-react';
+import JsonPreview from '@/components/JsonPreview';
 
 export default function App() {
   const [parsedData, setParsedData] = useState<ParsedData>({
@@ -21,6 +22,7 @@ export default function App() {
     headerRows: 1,
     skipRows: 0,
     hierarchical: false,
+    skipCondition: { type: 'empty' }
   });
 
   const [columnConfig, setColumnConfig] = useState<Record<string, ColumnConfig>>({});
@@ -62,19 +64,24 @@ export default function App() {
     }
   }, [csvContent, initializeColumnConfig]);
 
-  const handleDownload = () => {
-    const jsonData = convertToJSON(parsedData, columnConfig);
-    const blob = new Blob([JSON.stringify(jsonData, null, 2)], {
-      type: 'application/json',
+  const handleDownload = async () => {
+    return new Promise<void>((resolve) => {
+      const jsonContent = convertToJSON(parsedData, columnConfig);
+      const blob = new Blob([JSON.stringify(jsonContent, null, 2)], {
+        type: 'application/json',
+      });
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentFileName?.replace('.csv', '.json') || 'converted.json';
+      
+      setTimeout(() => {
+        a.click();
+        URL.revokeObjectURL(url);
+        resolve();
+      }, 800);
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'converted.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const handleColumnConfigChange = useCallback((newConfig: Record<string, ColumnConfig>) => {
@@ -84,19 +91,20 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 relative pb-16">
       {csvContent && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <Button
-            size="lg"
-            onClick={handleDownload}
+        <div className="fixed bottom-4 right-4 z-50 flex gap-2">
+          <JsonPreview 
+            parsedData={parsedData}
+            columnConfig={columnConfig}
             className="shadow-lg"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Download JSON
-          </Button>
+          />
+          <DownloadButton 
+            onDownload={handleDownload}
+            className="shadow-lg"
+          />
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto p-8">
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             CSV to JSON Converter
@@ -110,26 +118,39 @@ export default function App() {
           <FileUpload
             onFileSelect={handleFileSelect}
             currentFileName={currentFileName}
+            headerConfig={headerConfig}
           />
 
           {csvContent && (
-            <>
-              <DataPreview
-                data={parsedData}
-                columnConfig={columnConfig}
-              />
+            <Tabs defaultValue="preview" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="preview" className="flex items-center gap-2">
+                  <Table className="w-4 h-4" />
+                  Data Preview
+                </TabsTrigger>
+                <TabsTrigger value="columns" className="flex items-center gap-2">
+                  <Columns className="w-4 h-4" />
+                  Column Manager
+                </TabsTrigger>
+              </TabsList>
 
-              <HeaderConfigPanel
-                config={headerConfig}
-                onConfigChange={handleHeaderConfigChange}
-              />
+              <TabsContent value="preview" className="mt-6">
+                <DataPreview
+                  data={parsedData}
+                  columnConfig={columnConfig}
+                  headerConfig={headerConfig}
+                  onHeaderConfigChange={handleHeaderConfigChange}
+                />
+              </TabsContent>
 
-              <ColumnManager
-                headers={parsedData.headers}
-                columnConfig={columnConfig}
-                onConfigChange={handleColumnConfigChange}
-              />
-            </>
+              <TabsContent value="columns" className="mt-6">
+                <ColumnManager
+                  headers={parsedData.headers}
+                  columnConfig={columnConfig}
+                  onConfigChange={handleColumnConfigChange}
+                />
+              </TabsContent>
+            </Tabs>
           )}
         </div>
       </div>
