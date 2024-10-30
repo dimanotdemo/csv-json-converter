@@ -175,11 +175,14 @@ export default function FileUpload({ onFileSelect, currentFileName, headerConfig
       await new Promise(resolve => setTimeout(resolve, 300));
       setUploadProgress(60);
 
-      setFileContent(content);
-      onFileSelect(content, 'pasted-content.csv');
+      // Process the pasted content the same way we process file content
+      const processedContent = processCSVContent(content);
+      
+      setFileContent(processedContent);
+      onFileSelect(processedContent, 'pasted-content.csv');
       
       try {
-        parseCSV(content, headerConfig);
+        parseCSV(processedContent, headerConfig);
       } catch (parseError) {
         console.error('CSV parsing error:', parseError);
         throw new Error('Failed to parse CSV content. Please check the format.');

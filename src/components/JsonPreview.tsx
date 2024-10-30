@@ -5,7 +5,7 @@ import { Eye } from "lucide-react";
 import { ParsedData, ColumnConfig } from '@/types';
 import { convertToJSON } from '@/utils/csvParser';
 import Prism from 'prismjs';
-import 'prismjs/themes/prism-tomorrow.css'; // You can choose different themes
+import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-json';
 
 interface JsonPreviewProps {
@@ -14,6 +14,10 @@ interface JsonPreviewProps {
   className?: string;
 }
 
+type RecursiveObject = {
+  [key: string]: string | number | boolean | null | RecursiveObject | RecursiveObject[];
+};
+
 export default function JsonPreview({ parsedData, columnConfig, className }: JsonPreviewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [jsonContent, setJsonContent] = useState<string>('');
@@ -21,7 +25,32 @@ export default function JsonPreview({ parsedData, columnConfig, className }: Jso
 
   const generatePreview = useCallback(() => {
     const json = convertToJSON(parsedData, columnConfig);
-    const formatted = JSON.stringify(json, null, 2);
+    
+    // Convert all object keys to lowercase recursively
+    const lowercaseKeys = (obj: RecursiveObject[]): RecursiveObject[] => {
+      return obj.map(item => {
+        const result: RecursiveObject = {};
+        
+        Object.entries(item).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            result[key.toLowerCase()] = value.map(v => 
+              typeof v === 'object' && v !== null 
+                ? lowercaseKeys([v as RecursiveObject])[0] 
+                : v
+            );
+          } else if (value !== null && typeof value === 'object') {
+            result[key.toLowerCase()] = lowercaseKeys([value as RecursiveObject])[0];
+          } else {
+            result[key.toLowerCase()] = value;
+          }
+        });
+        
+        return result;
+      });
+    };
+
+    const lowercaseJson = lowercaseKeys(json as unknown as RecursiveObject[]);
+    const formatted = JSON.stringify(lowercaseJson, null, 2);
     setJsonContent(formatted);
     setIsOpen(true);
   }, [parsedData, columnConfig]);

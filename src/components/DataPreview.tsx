@@ -183,8 +183,14 @@ export default function DataPreview({
                 <Table>
                   <TableHeader className="sticky top-0 bg-background border-b">
                     <TableRow>
+                      {/* Add header for row numbers */}
+                      <TableHead 
+                        className="w-12 text-center bg-muted font-medium"
+                        style={{ minWidth: '48px' }}
+                      >
+                        #
+                      </TableHead>
                       {visibleHeaders.map((header, index) => {
-                        // Get display name for header (handle blank case)
                         const displayName = columnConfig[header]?.mappedName || 
                           (header.trim() === '' ? 'BLANK' : header);
 
@@ -223,6 +229,13 @@ export default function DataPreview({
                   <TableBody>
                     {tableData.map((row, rowIndex) => (
                       <TableRow key={`row-${rowIndex}`}>
+                        {/* Add row number cell */}
+                        <TableCell 
+                          className="text-center text-sm text-muted-foreground bg-muted/50 font-mono"
+                          style={{ width: '48px', minWidth: '48px' }}
+                        >
+                          {rowIndex + 1}
+                        </TableCell>
                         {visibleHeaders.map((header, colIndex) => {
                           const content = row[header];
                           const hasNewlines = content?.includes('\n');

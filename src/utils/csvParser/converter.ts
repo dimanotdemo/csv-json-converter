@@ -1,4 +1,4 @@
-import { ParsedData, ColumnConfig } from '@/types';
+import { ParsedData, ColumnConfig, toLowerKeys } from '@/types';
 import { CartesianOptions, VariantData } from '@/types';
 import { cleanValue, generateVariants, cleanupNullValues } from './helpers';
 
@@ -68,7 +68,7 @@ export function convertToJSON(
     return value;
   };
 
-  return data.rows.map(row => {
+  const result = data.rows.map(row => {
     const jsonObject = {} as JsonObject;
     const metafields: Metafield[] = [];
     const options: CartesianOptions[] = [];
@@ -84,14 +84,15 @@ export function convertToJSON(
 
       // Use BLANK for empty header if it's not mapped
       const effectiveHeader = header || "BLANK";
-      const mappedName = config.mappedName || effectiveHeader;
+      // Ensure mapped name is lowercase
+      const mappedName = (config.mappedName || effectiveHeader).toLowerCase();
       
       if (config.isMetafield) {
         metafields.push({
-          key: mappedName.toLowerCase().replace(/\s+/g, '_'),
+          key: mappedName.replace(/\s+/g, '_'),
           value: value,
           type: config.metafieldType || 'string',
-          namespace: config.metafieldNamespace || 'custom'
+          namespace: (config.metafieldNamespace || 'custom').toLowerCase()
         });
       } else if (config.isOption) {
         const values = value
@@ -106,26 +107,27 @@ export function convertToJSON(
           });
         }
       } else if (config.injectIntoVariants) {
-        variantFields[config.variantFieldName || mappedName] = value;
+        // Ensure variant field names are lowercase
+        const variantFieldName = (config.variantFieldName || mappedName).toLowerCase();
+        variantFields[variantFieldName] = value;
       } else {
-        // Use the mapped name for the field
+        // Use lowercase mapped name for the field
         jsonObject[mappedName] = convertValue(value, config.metafieldType);
       }
     });
 
-    // Add metafields if any exist
+    // Add arrays to object with lowercase keys
     if (metafields.length > 0) {
       jsonObject.metafields = metafields;
     }
 
-    // Add options if any exist
     if (options.length > 0) {
       jsonObject.options = options;
     }
 
     // Generate variants if options exist
     if (options.length > 0 || Object.keys(variantFields).length > 0) {
-      const variants = generateVariants(options, variantFields, jsonObject.sku as string);
+      const variants = generateVariants(options, variantFields, (jsonObject.sku as string)?.toLowerCase());
       if (variants.length > 0) {
         jsonObject.variants = variants;
       }
@@ -133,4 +135,7 @@ export function convertToJSON(
 
     return cleanupNullValues(jsonObject) as JsonObject;
   });
+
+  // Convert all keys to lowercase
+  return toLowerKeys(result) as JsonObject[];
 }
