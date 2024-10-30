@@ -1,4 +1,4 @@
-import { ParsedData, HeaderConfig, ColumnConfig } from '../types';
+import { ParsedData, HeaderConfig, ColumnConfig } from '../types/index';
 
 export function parseCSV(content: string, config: HeaderConfig): ParsedData {
   const lines = content.split('\n').map(line => line.trim()).filter(Boolean);
@@ -59,10 +59,29 @@ export function parseCSV(content: string, config: HeaderConfig): ParsedData {
   };
 }
 
+// Define interfaces for the JSON structure
+interface Metafield {
+  key: string;
+  value: string;
+  type: string;
+  namespace: string;
+}
+
+interface Variant {
+  [key: string]: string;
+}
+
+interface JsonObject {
+  [key: string]: string | Metafield[] | Array<{name: string; values: string[]}> | Variant[] | undefined;
+  metafields?: Metafield[];
+  options?: Array<{name: string; values: string[]}>;
+  variants?: Variant[];
+}
+
 export function convertToJSON(data: ParsedData, columnConfig: Record<string, ColumnConfig>) {
   return data.rows.map(row => {
-    const obj: Record<string, any> = {};
-    const metafields: any[] = [];
+    const obj: JsonObject = {};
+    const metafields: Metafield[] = [];
     const options: { name: string; values: string[] }[] = [];
     const variantFields: Record<string, string> = {};
 
@@ -102,7 +121,7 @@ export function convertToJSON(data: ParsedData, columnConfig: Record<string, Col
 
     // Process custom columns
     Object.entries(columnConfig)
-      .filter(([_, config]) => config.isCustom && config.include)
+      .filter(([, config]) => config.isCustom && config.include)
       .forEach(([header, config]) => {
         const value = config.defaultValue;
         if (!value || value.toLowerCase() === 'null') return;
@@ -126,7 +145,7 @@ export function convertToJSON(data: ParsedData, columnConfig: Record<string, Col
       if (validOptions.length > 0) {
         obj.options = validOptions;
       
-        const generateVariants = (optionsList: typeof options): any[] => {
+        const generateVariants = (optionsList: typeof options): Variant[] => {
           if (optionsList.length === 0) return [];
 
           const cartesian = (...arrays: string[][]): string[][] => {
@@ -140,7 +159,7 @@ export function convertToJSON(data: ParsedData, columnConfig: Record<string, Col
 
           return combinations.map((combo) => {
             // Start with all variant fields
-            const variant: any = { ...variantFields };
+            const variant: Record<string, string> = { ...variantFields };
             
             // Add option values
             combo.forEach((value, index) => {

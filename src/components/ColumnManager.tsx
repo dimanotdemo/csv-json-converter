@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ColumnConfig } from '../types';
+import { useState } from 'react';
+import { ColumnConfig } from '../types/index';
 import { Settings, ArrowRight, Plus } from 'lucide-react';
 
 interface ColumnManagerProps {

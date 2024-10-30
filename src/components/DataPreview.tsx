@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useMemo } from 'react';
-import { ParsedData, ColumnConfig } from '../types';
+import { useRef, useEffect, useMemo } from 'react';
+import { ParsedData, ColumnConfig } from '../types/index';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 
 interface DataPreviewProps {
@@ -13,7 +13,7 @@ export default function DataPreview({ data, columnConfig }: DataPreviewProps) {
   const visibleHeaders = useMemo(() => [
     ...data.headers.filter(header => columnConfig[header]?.include),
     ...Object.entries(columnConfig)
-      .filter(([_, config]) => config.isCustom && config.include)
+      .filter(([, config]) => config.isCustom && config.include)
       .map(([header]) => header)
   ], [data.headers, columnConfig]);
 
@@ -69,7 +69,7 @@ export default function DataPreview({ data, columnConfig }: DataPreviewProps) {
   const enhancedPreview = useMemo(() => data.preview.map(row => {
     const enhancedRow = { ...row };
     Object.entries(columnConfig)
-      .filter(([_, config]) => config.isCustom && config.include)
+      .filter(([, config]) => config.isCustom && config.include)
       .forEach(([header, config]) => {
         enhancedRow[header] = config.defaultValue || '';
       });

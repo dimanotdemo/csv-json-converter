@@ -3,12 +3,7 @@ export interface CartesianOptions {
   values: string[];
 }
 
+// Make VariantData more flexible - allow any string fields
 export interface VariantData {
-  [key: string]: string | number;
-  option1?: string;
-  option2?: string;
-  option3?: string;
-  price?: string;
-  compare_at_price?: string;
-  sku?: string;
+  [key: string]: string;
 }

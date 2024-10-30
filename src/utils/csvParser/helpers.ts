@@ -35,31 +35,31 @@ export function generateVariants(
     });
     
     // Generate SKU if needed
-    if (!variant.sku && baseSku) {
+    if (baseSku) {
       const validCombo = combo.filter(v => cleanValue(v));
       if (validCombo.length > 0) {
         variant.sku = `${baseSku}-${validCombo.join('-')}`;
       }
     }
     
-    // Clean up any null values
-    Object.keys(variant).forEach(key => {
-      const value = variant[key];
-      if (!value || (typeof value === 'string' && value.toLowerCase() === 'null')) {
-        delete variant[key];
-      }
-    });
-    
     return variant;
   }).filter(variant => Object.keys(variant).length > 0);
 }
 
-export function cleanupNullValues<T extends Record<string, any>>(obj: T): Partial<T> {
+export function cleanupNullValues<T extends Record<string, string | string[] | number | boolean | null | undefined | object[] | object>>(obj: T): Partial<T> {
   const cleaned: Partial<T> = {};
   Object.entries(obj).forEach(([key, value]) => {
-    const cleanedValue = cleanValue(value as string);
-    if (cleanedValue !== null) {
-      cleaned[key as keyof T] = cleanedValue as T[keyof T];
+    if (Array.isArray(value)) {
+      if (value.length > 0) {
+        cleaned[key as keyof T] = value as T[keyof T];
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      cleaned[key as keyof T] = value as T[keyof T];
+    } else {
+      const cleanedValue = cleanValue(value as string);
+      if (cleanedValue !== null) {
+        cleaned[key as keyof T] = cleanedValue as T[keyof T];
+      }
     }
   });
   return cleaned;

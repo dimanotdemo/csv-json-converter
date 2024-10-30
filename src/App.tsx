@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Download } from 'lucide-react';
 import FileUpload from './components/FileUpload';
 import HeaderConfigPanel from './components/HeaderConfig';
 import ColumnManager from './components/ColumnManager';
 import DataPreview from './components/DataPreview';
-import { ParsedData, HeaderConfig, ColumnConfig } from './types';
+import { ParsedData, HeaderConfig, ColumnConfig } from './types/index';
 import { parseCSV, convertToJSON } from './utils/csvParser';
 
 export default function App() {
@@ -24,8 +24,9 @@ export default function App() {
 
   const [columnConfig, setColumnConfig] = useState<Record<string, ColumnConfig>>({});
   const [csvContent, setCsvContent] = useState<string>('');
+  const [currentFileName, setCurrentFileName] = useState<string>('');
 
-  const initializeColumnConfig = (headers: string[], secondRowHeaders: string[]) => {
+  const initializeColumnConfig = useCallback((headers: string[], secondRowHeaders: string[]) => {
     const newColumnConfig: Record<string, ColumnConfig> = {};
     headers.forEach((header, index) => {
       newColumnConfig[header] = {
@@ -41,14 +42,15 @@ export default function App() {
       };
     });
     return newColumnConfig;
-  };
+  }, [columnConfig]);
 
-  const handleFileSelect = useCallback((content: string) => {
+  const handleFileSelect = useCallback((content: string, fileName: string) => {
     setCsvContent(content);
+    setCurrentFileName(fileName);
     const data = parseCSV(content, headerConfig);
     setParsedData(data);
     setColumnConfig(initializeColumnConfig(data.headers, data.secondRowHeaders));
-  }, [headerConfig]);
+  }, [headerConfig, initializeColumnConfig]);
 
   const handleHeaderConfigChange = useCallback((newConfig: HeaderConfig) => {
     setHeaderConfig(newConfig);
@@ -57,7 +59,7 @@ export default function App() {
       setParsedData(data);
       setColumnConfig(initializeColumnConfig(data.headers, data.secondRowHeaders));
     }
-  }, [csvContent]);
+  }, [csvContent, initializeColumnConfig]);
 
   const handleDownload = () => {
     const jsonData = convertToJSON(parsedData, columnConfig);
@@ -74,6 +76,10 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleColumnConfigChange = useCallback((newConfig: Record<string, ColumnConfig>) => {
+    setColumnConfig(newConfig);
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -87,7 +93,10 @@ export default function App() {
         </header>
 
         <div className="space-y-8">
-          <FileUpload onFileSelect={handleFileSelect} />
+          <FileUpload 
+            onFileSelect={handleFileSelect} 
+            currentFileName={currentFileName} 
+          />
 
           {parsedData.headers.length > 0 && (
             <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
@@ -104,9 +113,7 @@ export default function App() {
               <ColumnManager
                 headers={parsedData.headers}
                 columnConfig={columnConfig}
-                onConfigChange={setColumnConfig}
-                originalHeaders={parsedData.originalHeaders}
-                secondRowHeaders={parsedData.secondRowHeaders}
+                onConfigChange={handleColumnConfigChange}
               />
 
               <div className="flex justify-end">

@@ -1,11 +1,26 @@
-import { ParsedData, ColumnConfig } from '../../types';
-import { CartesianOptions } from './types';
+import { ParsedData, ColumnConfig } from '../../types/index';
+import { CartesianOptions, VariantData as ImportedVariantData } from './types';
 import { cleanValue, generateVariants, cleanupNullValues } from './helpers';
+
+// Define interfaces for the JSON structure
+interface Metafield {
+  key: string;
+  value: string;
+  type: string;
+  namespace: string;
+}
+
+interface JsonObject {
+  [key: string]: string | Metafield[] | CartesianOptions[] | ImportedVariantData[] | undefined;
+  metafields?: Metafield[];
+  options?: CartesianOptions[];
+  variants?: ImportedVariantData[];
+}
 
 export function convertToJSON(data: ParsedData, columnConfig: Record<string, ColumnConfig>) {
   return data.rows.map(row => {
-    const obj: Record<string, any> = {};
-    const metafields: any[] = [];
+    const obj: JsonObject = {};
+    const metafields: Metafield[] = [];
     const options: CartesianOptions[] = [];
     const variantFields: Record<string, string> = {};
 
@@ -47,7 +62,7 @@ export function convertToJSON(data: ParsedData, columnConfig: Record<string, Col
 
     // Process custom columns
     Object.entries(columnConfig)
-      .filter(([_, config]) => config.isCustom && config.include)
+      .filter(([, config]) => config.isCustom && config.include)
       .forEach(([header, config]) => {
         const value = cleanValue(config.defaultValue);
         if (value === null) return;
@@ -72,11 +87,16 @@ export function convertToJSON(data: ParsedData, columnConfig: Record<string, Col
       
       if (validOptions.length > 0) {
         obj.options = validOptions;
-        const variants = generateVariants(validOptions, variantFields, obj.sku);
+        
+        // Generate variants regardless of SKU presence
+        const variants = generateVariants(validOptions, variantFields, obj.sku as string | undefined);
         if (variants.length > 0) {
           obj.variants = variants;
         }
       }
+    } else if (Object.keys(variantFields).length > 0) {
+      // If we have variant fields but no options, create a single variant
+      obj.variants = [{...variantFields}];
     }
 
     return cleanupNullValues(obj);
