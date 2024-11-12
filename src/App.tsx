@@ -27,9 +27,10 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
   });
 
   const [headerConfig, setHeaderConfig] = useState<HeaderConfig>({
-    headerRows: 1,
+    headerRows: 2,
     skipRows: 0,
     hierarchical: false,
+    useLastRowAsHeader: true,
     skipCondition: { type: 'empty' }
   });
 
@@ -57,11 +58,9 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
   }, [columnConfig]);
 
   const handleFileSelect = useCallback((content: string, fileName: string) => {
-    console.log('handleFileSelect called with:', { contentLength: content.length, fileName })
     setCsvContent(content);
     setCurrentFileName(fileName);
     const data = parseCSV(content, headerConfig);
-    console.log('Parsed data:', data)
     setParsedData(data);
     setColumnOrder(data.headers);
     setColumnConfig(initializeColumnConfig(data.headers, data.secondRowHeaders));
@@ -78,7 +77,6 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
 
   const handleDownload = async () => {
     return new Promise<void>((resolve) => {
-      console.log('Downloading with column order:', columnOrder);
       const jsonContent = convertToJSON(parsedData, columnConfig, columnOrder);
       const normalizedJson = normalizeJson(jsonContent);
       
@@ -104,7 +102,6 @@ const App = forwardRef<AppHandle, { hideUpload?: boolean }>((props, ref) => {
   }, []);
 
   const handleColumnOrderChange = useCallback((newOrder: string[]) => {
-    console.log('Column order changed:', newOrder);
     setColumnOrder(newOrder);
   }, []);
 

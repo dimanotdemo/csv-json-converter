@@ -283,14 +283,20 @@ function HeaderConfigPanel({ config, onConfigChange, totalRows }: {
   onConfigChange: (config: HeaderConfigType) => void;
   totalRows?: number;
 }) {
-  const [localConfig, setLocalConfig] = useState(config);
+  const [localConfig, setLocalConfig] = useState({
+    ...config,
+    useLastRowAsHeader: config.useLastRowAsHeader ?? true
+  });
   const [error, setError] = useState<string | null>(null);
   const [skipCondition, setSkipCondition] = useState<SkipCondition>(
     config.skipCondition || { type: 'empty' }
   );
 
   useEffect(() => {
-    setLocalConfig(config);
+    setLocalConfig({
+      ...config,
+      useLastRowAsHeader: config.useLastRowAsHeader ?? true
+    });
     if (config.skipCondition) {
       setSkipCondition(config.skipCondition);
     }
@@ -329,7 +335,34 @@ function HeaderConfigPanel({ config, onConfigChange, totalRows }: {
             className={cn(error && "border-destructive")}
           />
           <p className="text-xs text-muted-foreground">
-            Select how many rows contain headers
+            Number of header rows in your CSV
+          </p>
+        </div>
+
+        {/* Header Selection - Always show this option */}
+        <div className="space-y-2">
+          <Label>Header Selection</Label>
+          <Select
+            value={localConfig.useLastRowAsHeader ? "last" : "first"}
+            onValueChange={(value) => {
+              const newConfig = {
+                ...localConfig,
+                useLastRowAsHeader: value === "last"
+              };
+              setLocalConfig(newConfig);
+              onConfigChange(newConfig);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select header row" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="first">Use First Row</SelectItem>
+              <SelectItem value="last">Use Last Row</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            When multiple header rows exist, choose which one to use
           </p>
         </div>
 

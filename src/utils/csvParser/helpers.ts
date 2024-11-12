@@ -41,38 +41,33 @@ export function generateVariants(
   variantFields: Record<string, string>,
   baseSku?: string
 ): VariantData[] {
-  if (options.length === 0 && Object.keys(variantFields).length === 0) return [];
-
-  let variants: VariantData[] = [{ ...variantFields }];
-
-  if (options.length > 0) {
-    const optionValues = options.map(opt => opt.values);
-    const combinations = cartesianProduct(...optionValues);
-
-    variants = combinations.map((combo) => {
-      const variant: VariantData = { ...variantFields };
-      
-      combo.slice(0, 3).forEach((value, index) => {
-        const cleanedValue = cleanValue(value);
-        if (cleanedValue) {
-          variant[`option${index + 1}`] = cleanedValue;
-        }
-      });
-      
-      if (baseSku) {
-        const validCombo = combo.filter(v => cleanValue(v));
-        if (validCombo.length > 0) {
-          variant.sku = `${baseSku}-${validCombo.join('-')}`;
-        } else {
-          variant.sku = baseSku;
-        }
-      }
-      
-      return variant;
-    });
+  if (options.length === 0) {
+    return [{ ...variantFields }];
   }
 
-  return variants.filter(variant => Object.keys(variant).length > 0);
+  const optionValues = options.map(opt => opt.values);
+  const combinations = cartesianProduct(...optionValues);
+
+  return combinations.map((combo) => {
+    const variant: VariantData = { ...variantFields };
+    
+    combo.forEach((value, index) => {
+      if (value && value.toLowerCase() !== 'null') {
+        variant[`option${index + 1}`] = value;
+      }
+    });
+    
+    if (baseSku) {
+      const validCombo = combo.filter(v => v && v.toLowerCase() !== 'null');
+      if (validCombo.length > 0) {
+        variant.sku = `${baseSku}-${validCombo.join('-')}`;
+      } else {
+        variant.sku = baseSku;
+      }
+    }
+    
+    return variant;
+  });
 }
 
 export function cleanupNullValues(obj: JsonObject): JsonObject {

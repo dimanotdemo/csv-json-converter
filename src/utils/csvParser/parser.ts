@@ -185,17 +185,13 @@ export function parseCSV(content: string, config: HeaderConfig, options: ParseOp
   const headerRows = normalizedRows.slice(0, config.headerRows);
   const dataRows = normalizedRows
     .slice(config.headerRows)
-    .filter((row, index) => !shouldSkipRow(row, index + config.headerRows));
+    .filter((row, index) => !shouldSkipRow(row, index));
 
-  const headers = config.hierarchical && headerRows.length > 1
-    ? headerRows[0].map((header, index) => {
-        const subHeader = headerRows[1][index];
-        // If header is blank, use BLANK
-        if (!header?.trim()) return "BLANK";
-        // If we have both, combine them
-        return subHeader?.trim() ? `${header} - ${subHeader}` : header;
-      })
-    : headerRows[0].map(header => header?.trim() || "BLANK");
+  // Use either first or last row as headers based on config
+  const headers = (config.useLastRowAsHeader ? 
+    headerRows[headerRows.length - 1] : 
+    headerRows[0])
+    .map(header => header?.trim() || "BLANK");
 
   const preview = dataRows.slice(0, 5).map(row => {
     const rowData: Record<string, string> = {};

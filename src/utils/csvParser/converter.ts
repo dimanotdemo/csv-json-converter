@@ -1,6 +1,6 @@
 import { ParsedData, ColumnConfig } from '@/types';
 import { CartesianOptions, VariantData } from '@/types';
-import { cleanValue, generateVariants } from './helpers';
+import { generateVariants } from './helpers';
 
 interface Metafield {
   key: string;
@@ -24,56 +24,86 @@ export function convertToJSON(
   columnConfig: Record<string, ColumnConfig>,
   columnOrder?: string[]
 ): JsonObject[] {
-  // Use columnOrder if provided, otherwise use the original order
   const orderedHeaders = columnOrder || data.headers;
   
-  return data.preview.map(row => {
+  const customColumns = Object.entries(columnConfig)
+    .filter(([, config]) => config.isCustom);
+  
+  return data.rows.map(row => {
     const obj: JsonObject = {};
     const metafields: Metafield[] = [];
     const options: CartesianOptions[] = [];
-    let variants: VariantData[] = [];
+    const variantFields: Record<string, string> = {};
     
-    // Process headers in the specified order
-    orderedHeaders.forEach(header => {
+    [...orderedHeaders, ...customColumns.map(([, config]) => config.mappedName)].forEach(header => {
       const config = columnConfig[header];
       if (!config || !config.include) return;
       
-      const value = cleanValue(row[header]);
+      const mappedName = config.mappedName || header;
+      let value: string;
       
-      if (config.isMetafield && value !== null) {
-        metafields.push({
-          key: config.mappedName,
-          value: value,
-          type: config.metafieldType,
-          namespace: config.metafieldNamespace
-        });
-      } else if (config.isOption && value !== null) {
-        const values = value.split(config.optionSeparator).map(v => v.trim()).filter(Boolean);
+      if (config.isCustom) {
+        value = config.defaultValue?.trim() ?? '';
+      } else {
+        value = row[data.headers.indexOf(header)]?.trim() ?? '';
+      }
+      
+      if (config.injectIntoVariants) {
+        if (value !== '' && value.toLowerCase() !== 'null') {
+          const variantField = config.variantFieldName || mappedName;
+          
+          if (config.conditionalField && config.conditionalName) {
+            const conditionalValue = row[data.headers.indexOf(config.conditionalField)]?.trim();
+            if (conditionalValue && conditionalValue.toLowerCase() !== 'null') {
+              variantFields[config.conditionalName] = value;
+            } else {
+              variantFields[variantField] = value;
+            }
+          } else {
+            variantFields[variantField] = value;
+          }
+        }
+      } else if (config.isMetafield) {
+        if (value !== '' && value.toLowerCase() !== 'null') {
+          metafields.push({
+            key: mappedName,
+            value: value,
+            type: config.metafieldType,
+            namespace: config.metafieldNamespace
+          });
+        }
+      } else if (config.isOption) {
+        const values = value
+          .split(config.optionSeparator)
+          .map(v => v.trim())
+          .filter(v => v && v.toLowerCase() !== 'null');
+        
         if (values.length > 0) {
           options.push({
-            name: config.mappedName,
+            name: mappedName,
             values: values
           });
         }
-      } else if (config.injectIntoVariants) {
-        // Generate variants only if value is not null
-        const variantField = config.variantFieldName || config.mappedName;
-        if (value !== null) {
-          // Pass both required arguments to generateVariants with correct types
-          variants = generateVariants(
-            [{ name: variantField, values: [value] }], // cartesianOptions
-            { [variantField]: value } // variantFields as Record<string, string>
-          );
-        }
       } else {
-        obj[config.mappedName] = value;
+        if (value !== '' && value.toLowerCase() !== 'null') {
+          obj[mappedName] = value;
+        }
       }
     });
     
-    // Add arrays only if they have items
+    if (options.length > 0 || Object.keys(variantFields).length > 0) {
+      const variants = generateVariants(
+        options,
+        variantFields,
+        obj.sku as string
+      );
+      if (variants.length > 0) {
+        obj.variants = variants;
+      }
+    }
+    
     if (metafields.length > 0) obj.metafields = metafields;
     if (options.length > 0) obj.options = options;
-    if (variants.length > 0) obj.variants = variants;
     
     return obj;
   }).filter(obj => Object.keys(obj).length > 0);

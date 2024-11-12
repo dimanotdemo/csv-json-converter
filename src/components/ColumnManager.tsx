@@ -1,4 +1,4 @@
-import { useState, useEffect, isValidElement, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { ColumnConfig } from '../types/index';
 import { Settings, GripVertical } from 'lucide-react';
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable';
+import { Select, SelectTrigger, SelectValue, SelectItem, SelectContent } from "@/components/ui/select";
 
 interface ColumnManagerProps {
   headers: string[];
@@ -61,7 +62,7 @@ const DraggableColumnCard = ({
   onEditName,
   editingName,
 }: DraggableColumnCardProps) => {
-  const dragId = header === '' ? '_BLANK_' : header;
+  const dragId = header === '' ? '_BLANK_' : encodeURIComponent(header);
   
   const {
     attributes,
@@ -82,6 +83,22 @@ const DraggableColumnCard = ({
   const currentGroup = getGroup(columnConfig[header]);
   const pendingGroup = pendingChange ? getGroup({ ...columnConfig[header], ...pendingChange }) : currentGroup;
   const isMoving = currentGroup !== pendingGroup;
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const changes: Partial<ColumnConfig> = {
+      mappedName: value
+    };
+
+    // If this is a variant field, also update variantFieldName
+    if (columnConfig[header].injectIntoVariants) {
+      changes.variantFieldName = value;
+    }
+
+    onConfigChange(header, changes);
+  };
+
+  const [showRules, setShowRules] = useState(false);
 
   return (
     <div
@@ -121,18 +138,19 @@ const DraggableColumnCard = ({
               {editingName === header ? (
                 <Input
                   autoFocus
-                  value={columnConfig[header]?.mappedName || (header.trim() === '' ? 'BLANK' : header)}
-                  onChange={(e) => onConfigChange(header, { mappedName: e.target.value })}
+                  value={pendingChange?.mappedName || columnConfig[header]?.mappedName || header}
+                  onChange={handleNameChange}
                   onBlur={() => onEditName(null)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') onEditName(null);
                     if (e.key === 'Escape') {
-                      onConfigChange(header, { mappedName: header.trim() === '' ? 'BLANK' : header });
+                      onConfigChange(header, { mappedName: header });
                       onEditName(null);
                     }
                   }}
                   className="h-8 px-2"
                   onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.target.select()}
                 />
               ) : (
                 <Label 
@@ -149,6 +167,69 @@ const DraggableColumnCard = ({
               )}
             </div>
           </div>
+
+          {/* New Rules Section */}
+          {columnConfig[header].injectIntoVariants && (
+            <div className="mt-2 pt-2 border-t">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full justify-start text-xs"
+                onClick={() => setShowRules(!showRules)}
+              >
+                <Settings className="h-3 w-3 mr-2" />
+                Field Rules
+              </Button>
+              
+              {showRules && (
+                <div className="mt-2 space-y-2 text-sm">
+                  <div className="bg-muted/50 p-2 rounded-md">
+                    <Label className="text-xs">When another field has value:</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Select
+                        value={columnConfig[header].conditionalField || 'none'}
+                        onValueChange={(value) => {
+                          onConfigChange(header, {
+                            ...columnConfig[header],
+                            conditionalField: value === 'none' ? undefined : value
+                          });
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-xs">
+                          <SelectValue placeholder="Select field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {Object.keys(columnConfig)
+                            .filter(h => h !== header && h.trim() !== '')
+                            .map(h => (
+                              <SelectItem key={h} value={h}>
+                                {columnConfig[h].mappedName || h}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Label className="text-xs mt-2">Change this field to:</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        className="h-7 text-xs"
+                        value={columnConfig[header].conditionalName || ''}
+                        onChange={(e) => {
+                          onConfigChange(header, {
+                            ...columnConfig[header],
+                            conditionalName: e.target.value
+                          });
+                        }}
+                        placeholder="New field name"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -173,20 +254,16 @@ const DroppableSection = ({
     id: group
   });
 
-  // Calculate count from children
   const getChildrenCount = () => {
-    if (isEmpty) return 0;
-    
-    // If children is an array, return its length
-    if (Array.isArray(children)) {
-      return children.length;
+    if (children && typeof children === 'object' && 'props' in children) {
+      const sortableContext = children.props.children;
+      if (sortableContext && typeof sortableContext === 'object' && 'props' in sortableContext) {
+        const grid = sortableContext.props.children;
+        if (grid && Array.isArray(grid)) {
+          return grid.length;
+        }
+      }
     }
-    
-    // If children is a single element, return 1
-    if (isValidElement(children)) {
-      return 1;
-    }
-    
     return 0;
   };
 
@@ -194,7 +271,7 @@ const DroppableSection = ({
     <div 
       ref={setNodeRef}
       className={cn(
-        "space-y-4 p-4 rounded-lg transition-colors",
+        "space-y-4 p-4 rounded-lg transition-colors min-h-[100px]",
         isDragOver && "bg-primary/5 border-2 border-dashed border-primary",
         isEmpty && "bg-muted/5"
       )}
@@ -206,19 +283,15 @@ const DroppableSection = ({
           {getChildrenCount()}
         </span>
       </h4>
-      {children}
+      <div className="relative">
+        {isDragOver && (
+          <div className="absolute inset-0 bg-primary/5 border-2 border-dashed border-primary rounded-lg pointer-events-none z-10" />
+        )}
+        {children}
+      </div>
     </div>
   );
 };
-
-// Add the normalizeKey function (same as in converter.ts)
-function normalizeKey(key: string): string {
-  return key
-    .toLowerCase()
-    .replace(/[\s-/]+/g, '_') // Replace spaces, hyphens, and forward slashes with underscores
-    .replace(/[^a-z0-9_]/g, '') // Remove any other special characters
-    .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
-}
 
 const ColumnManager = ({ 
   headers, 
@@ -237,7 +310,7 @@ const ColumnManager = ({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 4,
       },
     })
   );
@@ -272,11 +345,6 @@ const ColumnManager = ({
 
   // Then update handleConfigChange to normalize mappedName
   const handleConfigChange = (header: string, changes: Partial<ColumnConfig>) => {
-    // If we're changing the mappedName, normalize it
-    if ('mappedName' in changes) {
-      changes.mappedName = normalizeKey(changes.mappedName || header);
-    }
-
     // If it's a conversion option change, store it as pending
     if ('isMetafield' in changes || 'isOption' in changes || 'injectIntoVariants' in changes) {
       const newPendingChanges = {
@@ -287,38 +355,27 @@ const ColumnManager = ({
         }
       };
       setPendingChanges(newPendingChanges);
-
-      // Apply changes immediately
-      onConfigChange({
-        ...columnConfig,
-        [header]: {
-          ...columnConfig[header],
-          ...changes
-        }
-      });
-    } else {
-      // For non-conversion changes (like include/mappedName), apply immediately
-      onConfigChange({
-        ...columnConfig,
-        [header]: {
-          ...columnConfig[header],
-          ...changes
-        }
-      });
     }
+
+    // Apply changes immediately
+    onConfigChange({
+      ...columnConfig,
+      [header]: {
+        ...columnConfig[header],
+        ...changes
+      }
+    });
   };
 
   // Also update handleAddColumn to normalize the new column name
   const handleAddColumn = () => {
     if (!newColumnName.trim()) return;
 
-    const normalizedName = normalizeKey(newColumnName);
-
     const newConfig = {
       ...columnConfig,
       [newColumnName]: {
         originalName: newColumnName,
-        mappedName: normalizedName,
+        mappedName: newColumnName,
         include: true,
         isCustom: true,
         defaultValue: newColumnDefault,
@@ -382,8 +439,9 @@ const ColumnManager = ({
   }, [effectiveHeaders, columnConfig, groupOrders, getEffectiveGroup]);
 
   const handleDragStart = (event: DragStartEvent) => {
-    const id = event.active.id as string;
-    setActiveId(id === '_BLANK_' ? '' : id);
+    const rawId = event.active.id as string;
+    const id = rawId === '_BLANK_' ? '' : decodeURIComponent(rawId);
+    setActiveId(id);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -396,32 +454,29 @@ const ColumnManager = ({
   const handleDragEnd = (event: DragEndEvent) => {
     const {active, over} = event;
     
-    if (!over) return;
+    if (!over) {
+      setActiveId(null);
+      setDragOverGroup(null);
+      return;
+    }
 
-    const activeId = active.id as string;
-    const overId = over.id as string;
+    const activeId = active.id === '_BLANK_' ? '' : decodeURIComponent(active.id as string);
+    const overId = over.id === '_BLANK_' ? '' : decodeURIComponent(over.id as string);
 
-    // Handle dropping into groups (existing functionality)
+    // Handle dropping into groups
     if (['basic', 'metafields', 'options', 'variants'].includes(overId)) {
-      let changes: Partial<ColumnConfig> = {};
-      
-      // Reset all conversion flags
-      changes = {
+      const changes: Partial<ColumnConfig> = {
         isMetafield: false,
         isOption: false,
         injectIntoVariants: false,
       };
 
-      // Set the appropriate flag based on the target container
       switch (overId) {
         case 'metafields':
           changes.isMetafield = true;
-          changes.metafieldNamespace = 'custom';
-          changes.metafieldType = 'single_line_text_field';
           break;
         case 'options':
           changes.isOption = true;
-          changes.optionSeparator = ',';
           break;
         case 'variants':
           changes.injectIntoVariants = true;
@@ -432,36 +487,28 @@ const ColumnManager = ({
       handleConfigChange(activeId, changes);
     } 
     // Handle reordering within groups
-    else {
-      const activeHeader = activeId === '_BLANK_' ? '' : activeId;
-      const overHeader = overId === '_BLANK_' ? '' : overId;
-      
-      const activeGroup = getEffectiveGroup(activeHeader, columnConfig[activeHeader]);
-      const overGroup = getEffectiveGroup(overHeader, columnConfig[overHeader]);
+    else if (activeId !== overId) {
+      const activeGroup = getEffectiveGroup(activeId, columnConfig[activeId]);
+      const overGroup = getEffectiveGroup(overId, columnConfig[overId]);
       
       if (activeGroup === overGroup) {
-        const oldIndex = groupedHeaders[activeGroup].indexOf(activeHeader);
-        const newIndex = groupedHeaders[activeGroup].indexOf(overHeader);
+        const oldIndex = groupedHeaders[activeGroup].indexOf(activeId);
+        const newIndex = groupedHeaders[activeGroup].indexOf(overId);
         
-        if (oldIndex !== newIndex) {
+        if (oldIndex !== -1 && newIndex !== -1) {
           const newOrder = arrayMove(groupedHeaders[activeGroup], oldIndex, newIndex);
-          
-          // Calculate the new complete order immediately
-          const newCompleteOrder = Object.values(groupedHeaders).reduce((acc, headers) => {
-            if (headers === groupedHeaders[activeGroup]) {
-              return [...acc, ...newOrder];
-            }
-            return [...acc, ...headers];
-          }, [] as string[]);
-
-          // Update local state
           setGroupOrders(prev => ({
             ...prev,
             [activeGroup]: newOrder
           }));
           
-          // Notify parent of order change with the new complete order
           if (onOrderChange) {
+            const newCompleteOrder = Object.values(groupedHeaders).reduce((acc, headers) => {
+              if (headers === groupedHeaders[activeGroup]) {
+                return [...acc, ...newOrder];
+              }
+              return [...acc, ...headers];
+            }, [] as string[]);
             onOrderChange(newCompleteOrder);
           }
         }
@@ -570,7 +617,7 @@ const ColumnManager = ({
                   items={groupedHeaders[group]}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative min-h-[100px]">
                     {groupedHeaders[group].map((header, index) => (
                       <DraggableColumnCard
                         key={header}
@@ -597,7 +644,7 @@ const ColumnManager = ({
       </div>
 
       {/* Add drag overlay */}
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeId ? (
           <Card className="bg-white shadow-lg opacity-80">
             <CardContent className="p-4">

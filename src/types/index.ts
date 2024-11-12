@@ -17,6 +17,7 @@ export interface HeaderConfig {
   skipRows: number;
   hierarchical: boolean;
   skipCondition?: SkipCondition;
+  useLastRowAsHeader: boolean;
 }
 
 // Column Configuration Types
@@ -33,6 +34,8 @@ export interface ColumnConfig {
   optionSeparator: string;
   injectIntoVariants?: boolean;
   variantFieldName?: string;
+  conditionalField?: string;
+  conditionalName?: string;
 }
 
 // Variant and Options Types
